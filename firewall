@@ -1,0 +1,137 @@
+#!/bin/bash
+
+IPT="/sbin/iptables"
+
+#### IPS ######
+LOCAL_IP=$(ifconfig eth0 | grep 'inet addr:' | awk -F'inet addr:' '{ print $2}' | awk '{ print $1}')
+TRUSTED_NET="192.168.0.0/16 10.10.1.0/24"
+TRUSTED_USERS="root ispconfig ispapps"
+
+### Interfaces ###
+PUB_IF="eth0"   # public interface
+LO_IF="lo"      # loopback
+
+### start firewall ###
+echo "Setting $(hostname) Firewall..."
+
+# DROP and close everything 
+$IPT -F
+$IPT -X
+$IPT -t nat -F
+$IPT -t nat -X
+$IPT -t mangle -F
+$IPT -t mangle -X
+$IPT -P INPUT DROP
+$IPT -P OUTPUT DROP
+$IPT -P FORWARD DROP
+
+# Unlimited lo access
+$IPT -A INPUT -i ${LO_IF} -j ACCEPT
+$IPT -A OUTPUT -o ${LO_IF} -j ACCEPT
+
+# Drop sync
+$IPT -A INPUT -i ${PUB_IF} -p tcp ! --syn -m conntrack --ctstate NEW -j DROP
+
+# Drop Fragments
+$IPT -A INPUT -i ${PUB_IF} -f -j DROP
+
+$IPT  -A INPUT -i ${PUB_IF} -p tcp --tcp-flags ALL FIN,URG,PSH -j DROP
+$IPT  -A INPUT -i ${PUB_IF} -p tcp --tcp-flags ALL ALL -j DROP
+
+# Drop NULL packets
+$IPT  -A INPUT -i ${PUB_IF} -p tcp --tcp-flags ALL NONE -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] NULL Packets "
+$IPT  -A INPUT -i ${PUB_IF} -p tcp --tcp-flags ALL NONE -j DROP
+
+$IPT  -A INPUT -i ${PUB_IF} -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
+
+# Drop XMAS
+$IPT  -A INPUT -i ${PUB_IF} -p tcp --tcp-flags SYN,FIN SYN,FIN -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] XMAS Packets "
+$IPT  -A INPUT -i ${PUB_IF} -p tcp --tcp-flags SYN,FIN SYN,FIN -j DROP
+
+# Drop FIN packet scans
+$IPT  -A INPUT -i ${PUB_IF} -p tcp --tcp-flags FIN,ACK FIN -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] Fin Packets Scan "
+$IPT  -A INPUT -i ${PUB_IF} -p tcp --tcp-flags FIN,ACK FIN -j DROP
+
+$IPT  -A INPUT -i ${PUB_IF} -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j DROP
+
+# Log and get rid of broadcast / multicast and invalid 
+$IPT  -A INPUT -i ${PUB_IF} -m pkttype --pkt-type broadcast -j LOG --log-prefix "[FW] Broadcast "
+$IPT  -A INPUT -i ${PUB_IF} -m pkttype --pkt-type broadcast -j DROP
+
+$IPT  -A INPUT -i ${PUB_IF} -m pkttype --pkt-type multicast -j LOG --log-prefix "[FW] Multicast "
+$IPT  -A INPUT -i ${PUB_IF} -m pkttype --pkt-type multicast -j DROP
+
+$IPT  -A INPUT -i ${PUB_IF} -m conntrack --ctstate INVALID -j LOG --log-prefix "[FW] Invalid "
+$IPT  -A INPUT -i ${PUB_IF} -m conntrack --ctstate INVALID -j DROP
+
+# Allow communication from selected trusted networks/ips
+for ip in ${TRUSTED_NET}
+do
+        $IPT -A INPUT -i ${PUB_IF} -s ${ip} -d ${LOCAL_IP} -j ACCEPT
+        $IPT -A OUTPUT -o ${PUB_IF} -d ${ip} -s ${LOCAL_IP} -j ACCEPT
+done
+
+# allow incoming sync/ack packets
+$IPT -A INPUT -p tcp -m tcp --sport 0:1023 ! --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p tcp -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+# allow incoming ICMP ping pong stuff
+$IPT -A INPUT -i ${PUB_IF} -p icmp --icmp-type 8 -s 0/0 -m conntrack --ctstate NEW,ESTABLISHED,RELATED -m limit --limit 30/sec  -j ACCEPT
+$IPT -A OUTPUT -o ${PUB_IF} -p icmp --icmp-type 0 -d 0/0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# allow incoming HTTP port 80,443,8080,8081
+$IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 80 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 443 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 8080 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 8080 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 8081 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 8081 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+
+# allow incoming FTP
+$IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 20 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 20 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 21 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 21 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 50000:60000 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 50000:60000 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+
+# allow outgoing dns
+$IPT -A OUTPUT -o ${PUB_IF} -p udp --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p udp --sport 53 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p tcp --sport 53 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+
+# allow outgoing ntp
+$IPT -A OUTPUT -o ${PUB_IF} -p udp --dport 123 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p udp --sport 123 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+
+# allow outgoing smtp
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p tcp --sport 25 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+
+# allow outgoing HTTP
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p tcp --sport 80 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -p tcp --sport 443 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+
+# allow trusted users outbound
+for usr in ${TRUSTED_USERS}
+do
+        $IPT -I OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -j ACCEPT
+done
+
+### add your other rules here ####
+
+#######################
+# drop and log everything else
+$IPT -A INPUT -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] DEFAULT DROP "
+$IPT -A INPUT -j DROP
+
+# Restart fail2ban
+/etc/init.d/fail2ban restart
+
+exit 0
+
