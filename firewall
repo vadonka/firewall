@@ -101,25 +101,37 @@ $IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 21 -d 0/0 --dport 1024:65535 -m connt
 $IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 50000:60000 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 50000:60000 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
-# allow outgoing dns
+# allow outgoing DNS and LOG
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] DNS TCP"
+$IPT -A OUTPUT -o ${PUB_IF} -p udp --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] DNS UDP"
+
 $IPT -A OUTPUT -o ${PUB_IF} -p udp --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A INPUT -i ${PUB_IF} -p udp --sport 53 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A INPUT -i ${PUB_IF} -p tcp --sport 53 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
-# allow outgoing ntp
+# allow outgoing NTP and LOG
+$IPT -A OUTPUT -o ${PUB_IF} -p udp --dport 123 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] NTP "
+
 $IPT -A OUTPUT -o ${PUB_IF} -p udp --dport 123 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A INPUT -i ${PUB_IF} -p udp --sport 123 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
-# allow outgoing ssh
+# allow outgoing SSH and LOG
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SSH "
+
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A INPUT -i ${PUB_IF} -p tcp --sport 22 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
-# allow outgoing smtp
+# allow outgoing SMTP and LOG
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP "
+
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A INPUT -i ${PUB_IF} -p tcp --sport 25 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
-# allow outgoing HTTP
+# allow outgoing HTTP and LOG
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP "
+$IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS "
+
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A INPUT -i ${PUB_IF} -p tcp --sport 80 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
@@ -128,6 +140,7 @@ $IPT -A INPUT -i ${PUB_IF} -p tcp --sport 443 -m conntrack --ctstate ESTABLISHED
 # allow trusted users outbound
 for usr in ${TRUSTED_USERS}
 do
+        #$IPT -I OUTPUT -o ${PUB_IF} -j LOG --log-uid --log-prefix "[FW] ${usr} "
         $IPT -I OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -j ACCEPT
 done
 
