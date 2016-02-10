@@ -169,8 +169,16 @@ done
 $IPT -A INPUT -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] DEFAULT DROP "
 $IPT -A INPUT -j DROP
 
-# Restart fail2ban
-/etc/init.d/fail2ban restart
+# Restart fail2ban if detected and running
+config_detect=$(grep -e "pidfile.*.pid" /etc/fail2ban/fail2ban.conf)
+pidfile_start=$(echo $config_detect | grep -aob '/var' | awk -F ':' '{print $1}')
+f2b_pid=$(cat $(echo $config_detect | cut -b$pidfile_start-))
+
+if ps -p $f2b_pid > /dev/null
+then
+    echo "Fail2Ban detected and its running, restarting now!"
+    /etc/init.d/fail2ban restart
+fi
 
 exit 0
 
