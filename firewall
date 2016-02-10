@@ -4,7 +4,7 @@ IPT="/sbin/iptables"
 
 #### IPS ######
 LOCAL_IP=$(ifconfig eth0 | grep 'inet addr:' | awk -F'inet addr:' '{ print $2}' | awk '{ print $1}')
-TRUSTED_NET="192.168.0.0/16 10.10.1.0/24"
+TRUSTED_NET="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
 TRUSTED_USERS="root ispconfig ispapps"
 
 # Default ALL WEB USER will be trusted except whos listed in untrusted
@@ -13,6 +13,7 @@ UNTRUSTED_WEB_USERS=""
 ICMP_ACK="HU"
 FTP_ACK="HU"
 SSH_ACK="HU"
+ISPCONF_ACK="HU"
 SMTP_HOST=""
 
 ### Interfaces ###
@@ -85,45 +86,32 @@ $IPT -A INPUT -i ${PUB_IF} -p tcp -m conntrack --ctstate RELATED,ESTABLISHED -j 
 
 # allow incoming ICMP ping pong stuff
 $IPT -A INPUT -i ${PUB_IF} -m geoip --src-cc ${ICMP_ACK} -p icmp --icmp-type 8 -m conntrack --ctstate NEW,ESTABLISHED,RELATED -m limit --limit 30/sec  -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 10.0.0.0/8 -p icmp --icmp-type 8 -m conntrack --ctstate NEW,ESTABLISHED,RELATED -m limit --limit 30/sec  -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 172.16.0.0/12 -p icmp --icmp-type 8 -m conntrack --ctstate NEW,ESTABLISHED,RELATED -m limit --limit 30/sec  -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 192.168.0.0/16 -p icmp --icmp-type 8 -m conntrack --ctstate NEW,ESTABLISHED,RELATED -m limit --limit 30/sec  -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p icmp --icmp-type 0 -d 0/0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
 # allow incoming SSH
 $IPT -A INPUT -i ${PUB_IF} -m geoip --src-cc ${SSH_ACK} -p tcp --sport 1024:65535 --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 10.0.0.0/8 -p tcp --sport 1024:65535 --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 172.16.0.0/12 -p tcp --sport 1024:65535 --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 192.168.0.0/16 -p tcp --sport 1024:65535 --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 22 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
-# allow incoming HTTP port 80,443,8080,8081
+# allow incoming HTTP(S) port 80,443
 $IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 80 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 $IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 443 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 8080 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+
+# allow incoming ISPCONFIG HTTP(S) port 8080,8081
+$IPT -A INPUT -i ${PUB_IF} -m geoip --src-cc ${ISPCONF_ACK} -p tcp --sport 1024:65535 --dport 8080 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+$IPT -A INPUT -i ${PUB_IF} -m geoip --src-cc ${ISPCONF_ACK} -p tcp --sport 1024:65535 --dport 8081 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 8080 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -p tcp -s 0/0 --sport 1024:65535 --dport 8081 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 8081 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
 # allow incoming FTP
 $IPT -A INPUT -i ${PUB_IF} -m geoip --src-cc ${FTP_ACK} -p tcp --sport 1024:65535 --dport 20 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 10.0.0.0/8 -p tcp --sport 1024:65535 --dport 20 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 172.16.0.0/12 -p tcp --sport 1024:65535 --dport 20 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 192.168.0.0/16 -p tcp --sport 1024:65535 --dport 20 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 20 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
 $IPT -A INPUT -i ${PUB_IF} -m geoip --src-cc ${FTP_ACK} -p tcp --sport 1024:65535 --dport 21 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 10.0.0.0/8 -p tcp --sport 1024:65535 --dport 21 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 172.16.0.0/12 -p tcp --sport 1024:65535 --dport 21 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 192.168.0.0/16 -p tcp --sport 1024:65535 --dport 21 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 21 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
 $IPT -A INPUT -i ${PUB_IF} -m geoip --src-cc ${FTP_ACK} -p tcp --sport 1024:65535 --dport 50000:60000 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 10.0.0.0/8 -p tcp --sport 1024:65535 --dport 50000:60000 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 172.16.0.0/12 -p tcp --sport 1024:65535 --dport 50000:60000 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A INPUT -i ${PUB_IF} -s 192.168.0.0/16 -p tcp --sport 1024:65535 --dport 50000:60000 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A OUTPUT -o ${PUB_IF} -p tcp --sport 50000:60000 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
 # allow outgoing DNS and LOG
@@ -141,14 +129,7 @@ $IPT -A INPUT -i ${PUB_IF} -p udp --sport 123 -m conntrack --ctstate ESTABLISHED
 
 # allow outgoing SSH and LOG
 $IPT -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${SSH_ACK} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SSH "
-$IPT -A OUTPUT -o ${PUB_IF} -d 10.0.0.0/8 -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SSH "
-$IPT -A OUTPUT -o ${PUB_IF} -d 172.16.0.0/12 -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SSH "
-$IPT -A OUTPUT -o ${PUB_IF} -d 192.168.0.0/16 -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SSH "
-
 $IPT -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${SSH_ACK} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A OUTPUT -o ${PUB_IF} -d 10.0.0.0/8 -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A OUTPUT -o ${PUB_IF} -d 172.16.0.0/12 -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-$IPT -A OUTPUT -o ${PUB_IF} -d 192.168.0.0/16 -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 $IPT -A INPUT -i ${PUB_IF} -p tcp --sport 22 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
 # allow outgoing HTTP,SMTP and LOG for all user except untrusted
