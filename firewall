@@ -63,33 +63,42 @@ echo "Setting $(hostname) Firewall..."
 echo -n "WEB..."
 webhttp="0"
 webhttps="0"
-webport1=$(nc -zv ${LOCAL_IP} 80 &> /dev/null; echo $?)
-webport2=$(nc -zv ${LOCAL_IP} 443 &> /dev/null; echo $?)
-if [[ ${webport1} == "0" ]] && [[ ${webport2} == "1" ]]; then
-	echo "HTTP port is open."
+
+if (: < /dev/tcp/${LOCAL_IP}/80) 2>/dev/null
+then
+	echo -n "HTTP..."
 	webhttp="1"
-elif [[ ${webport1} == "1" ]] && [[ ${webport2} == "0" ]]; then
-	echo "HTTPS port is open."
+fi
+if (: < /dev/tcp/${LOCAL_IP}/443) 2>/dev/null
+then
+	echo -n "HTTPS..."
 	webhttps="1"
-elif [[ ${webport1} == "0" ]] && [[ ${webport2} == "0" ]]; then
-	echo "HTTP and HTTPS ports are open."
-	webhttp="1"
-	webhttps="1"
+fi
+if [[ ${webhttp} == "0" ]] && [[ ${webhttps} == "0" ]]; then
+	echo "no web port open."
 else
-	echo "No web port open."
+	echo "is open."
 fi
 
 ### Detect ISPConfig
 echo -n "ISPConfig..."
 ispconfig="0"
 if [ -e /usr/local/ispconfig ]; then
-	ispport1=$(nc -zv ${LOCAL_IP} 8080 &> /dev/null; echo $?)
-	ispport2=$(nc -zv ${LOCAL_IP} 8081 &> /dev/null; echo $?)
-	if [[ ${ispport1} == "0" ]] && [[ ${ispport2} == "0" ]]; then
-	echo "detected and default ports are open."
-	ispconfig="1"
+	ispport1="0"
+	ispport2="0"
+	if (: < /dev/tcp/${LOCAL_IP}/8080) 2>/dev/null
+	then
+		ispport1="1"
+	fi
+	if (: < /dev/tcp/${LOCAL_IP}/8081) 2>/dev/null
+	then
+		ispport2="1"
+	fi
+	if [[ ${ispport1} == "1" ]] && [[ ${ispport2} == "1" ]]; then
+		echo "detected and default ports are open."
+		ispconfig="1"
 	else
-	echo "detected but defaults port are not open, check ispconfig web configuration."
+		echo "detected but defaults port are not open, check ispconfig web configuration."
 	fi
 else
 	echo "not detected."
@@ -120,12 +129,17 @@ fi
 ### Detect FTP
 echo -n "FTP..."
 ftp="0"
-ftpport=$(nc -zv ${LOCAL_IP} 21 &> /dev/null; echo $?)
-if [[ ${ftpport} = "0" ]]; then
+ftpport="0"
+if (: < /dev/tcp/${LOCAL_IP}/21) 2>/dev/null
+then
+	ftpport="1"
+fi
+
+if [[ ${ftpport} = "1" ]]; then
 	echo "detected."
 	ftp="1"
 else
-    echo "not detected."
+	echo "not detected."
 fi
 
 # DROP and close everything 
