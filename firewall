@@ -129,15 +129,21 @@ fi
 ### Detect FTP
 echo -n "FTP..."
 ftp="0"
-ftpport="0"
 if (: < /dev/tcp/${LOCAL_IP}/21) 2>/dev/null
 then
-	ftpport="1"
-fi
-
-if [[ ${ftpport} = "1" ]]; then
 	echo "detected."
 	ftp="1"
+else
+	echo "not detected."
+fi
+
+### Detect DNS Server
+echo -n "DNS..."
+dns="0"
+if (: < /dev/tcp/${LOCAL_IP}/53) 2>/dev/null
+then
+	echo "detected."
+	dns="1"
 else
 	echo "not detected."
 fi
@@ -271,6 +277,14 @@ if [[ ${ftp} == "1" ]]; then
 	fi
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp --sport 20 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp --sport 21 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+fi
+
+# allow incoming DNS
+if [[ ${dns} == "1" ]]; then
+	${IPT} -A INPUT -i ${PUB_IF} -s 0/0 -p tcp --sport 1024:65535 --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A INPUT -i ${PUB_IF} -s 0/0 -p udp --sport 1024:65535 --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp --sport 53 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p udp --sport 53 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 fi
 
 # allow outgoing DNS and LOG
