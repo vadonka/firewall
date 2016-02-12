@@ -232,7 +232,7 @@ if [[ ${webhttp} == "1" ]]; then
 		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp --sport 80 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	else
 		${IPT} -A INPUT -i ${PUB_IF} -m geoip --src-cc ${HTTP_ACK} -p tcp --sport 1024:65535 --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-src ${HTTP_ACK} -p tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_ACK} -p tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 fi
 if [[ ${webhttps} == "1" ]]; then
@@ -241,7 +241,7 @@ if [[ ${webhttps} == "1" ]]; then
 		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp --sport 443 -d 0/0 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	else
 		${IPT} -A INPUT -i ${PUB_IF} -m geoip --src-cc ${HTTP_ACK} -p tcp --sport 1024:65535 --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-src ${HTTP_ACK} -p tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_ACK} -p tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 fi
 
