@@ -54,7 +54,7 @@ if [[ ${configured} == "no" ]]; then
 fi
 
 #### IPS ######
-LOCAL_IP=$(ifconfig ${PUB_IF} | grep 'inet addr:' | awk -F'inet addr:' '{ print $2}' | awk '{ print $1}')
+LOCAL_IP=$(ip addr show ${PUB_IF} | grep 'inet ' | awk -F ' ' '{print $2}' | awk -F '/' '{print $1}')
 
 ### Start firewall ###
 echo "Setting $(hostname) Firewall..."
