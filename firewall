@@ -32,6 +32,8 @@ ICMP_ACK=""
 FTP_ACK=""
 # SSH allow only from
 SSH_ACK=""
+## SSH outbound allow to custom IP, separated with space
+SSH_OUT_IP=""
 # ISPConfig webapps and ispapps (tcp 8080,8081) allow only from
 ISPCONF_ACK=""
 # HTTP(S) port allow only from
@@ -301,12 +303,26 @@ ${IPT} -A OUTPUT -o ${PUB_IF} -p udp --dport 123 -m conntrack --ctstate NEW,ESTA
 ${IPT} -A INPUT -i ${PUB_IF} -p udp --sport 123 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
 # allow outgoing SSH and LOG
-if [[ -z ${SSH_ACK} ]]; then
+if [[ -z ${SSH_ACK} ]] && [[ -z ${SSH_OUT_IP} ]]; then
 	${IPT} -A OUTPUT -o ${PUB_IF} -d 0/0 -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SSH "
 	${IPT} -A OUTPUT -o ${PUB_IF} -d 0/0 -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-else
+elif [[ ! -z ${SSH_ACK} ]] && [[ -z ${SSH_OUT_IP} ]]; then
 	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${SSH_ACK} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SSH "
 	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${SSH_ACK} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+elif [[ -z ${SSH_ACK} ]] && [[ ! -z ${SSH_OUT_IP} ]]; then
+	for sshoip in ${SSH_OUT_IP}
+		do
+		${IPT} -A OUTPUT -o ${PUB_IF} -d ${sshoip} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SSH "
+		${IPT} -A OUTPUT -o ${PUB_IF} -d ${sshoip} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	done
+elif [[ ! -z ${SSH_ACK} ]] && [[ ! -z ${SSH_OUT_IP} ]]; then
+	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${SSH_ACK} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SSH "
+	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${SSH_ACK} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	for sshoip in ${SSH_OUT_IP}
+		do
+		${IPT} -A OUTPUT -o ${PUB_IF} -d ${sshoip} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SSH "
+		${IPT} -A OUTPUT -o ${PUB_IF} -d ${sshoip} -p tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	done
 fi
 ${IPT} -A INPUT -i ${PUB_IF} -p tcp --sport 22 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
@@ -347,8 +363,8 @@ ${IPT} -A INPUT -i ${PUB_IF} -p tcp --sport 25 -m conntrack --ctstate ESTABLISHE
 # allow trusted users unlimited outbound
 for usr in ${TRUSTED_USERS}
 do
-        #${IPT} -I OUTPUT -o ${PUB_IF} -j LOG --log-uid --log-prefix "[FW] ${usr} " --- disabled because too much logging spoof
-        ${IPT} -I OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -j ACCEPT
+	#${IPT} -I OUTPUT -o ${PUB_IF} -j LOG --log-uid --log-prefix "[FW] ${usr} " --- disabled because too much logging spoof
+	${IPT} -I OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -j ACCEPT
 done
 
 if [[ ${ispconfig} == "1" ]]; then
