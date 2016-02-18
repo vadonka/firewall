@@ -329,14 +329,35 @@ fi
 ${IPT} -A INPUT -i ${PUB_IF} -p tcp --sport 22 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
 # allow outgoing HTTP,SMTP and LOG for all ispconfig user except untrusted
+http()
+{
+	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
+	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+}
+https()
+{
+	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
+	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+}
+httpack()
+{
+	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
+	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+}
+httpsack()
+{
+	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
+	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+}
+smtpack()
+{
+	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
+	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+}
+
 if [[ ${ispconfig} == "1" ]]; then
 	if [[ -z ${UNTRUST_ISPUSER} ]] && [[ -z ${HTTP_OUT_ACK} ]] && [[ -z ${HTTPS_OUT_ACK} ]]; then
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		http; https; smtpack;
 	elif [[ ! -z ${UNTRUST_ISPUSER} ]] && [[ -z ${HTTP_ACK} ]] && [[ -z ${HTTPS_ACK} ]]; then
 		grep ^web /etc/passwd | awk -F ':' '{print $1}' > /tmp/allusr
 		echo ${UNTRUST_ISPUSER} | tr ' ' '\n' > /tmp/untusr
@@ -356,26 +377,11 @@ if [[ ${ispconfig} == "1" ]]; then
 		rm -rf /tmp/allusr > /dev/null 2>&1
 		rm -rf /tmp/untusr > /dev/null 2>&1
 	elif [[ -z ${UNTRUST_ISPUSER} ]] && [[ ! -z ${HTTP_OUT_ACK} ]] && [[ -z ${HTTPS_OUT_ACK} ]]; then
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		httpack; https; smtpack;
 	elif [[ -z ${UNTRUST_ISPUSER} ]] && [[ -z ${HTTP_OUT_ACK} ]] && [[ ! -z ${HTTPS_OUT_ACK} ]]; then
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		http; httpsack; smtpack;
 	elif [[ -z ${UNTRUST_ISPUSER} ]] && [[ ! -z ${HTTP_OUT_ACK} ]] && [[ ! -z ${HTTPS_OUT_ACK} ]]; then
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		httpack; httpsack; smtpack;
 	elif [[ ! -z ${UNTRUST_ISPUSER} ]] && [[ ! -z ${HTTP_ACK} ]] && [[ ! -z ${HTTPS_ACK} ]]; then
 		grep ^web /etc/passwd | awk -F ':' '{print $1}' > /tmp/allusr
 		echo ${UNTRUST_ISPUSER} | tr ' ' '\n' > /tmp/untusr
@@ -394,41 +400,16 @@ if [[ ${ispconfig} == "1" ]]; then
 		rm -rf /tmp/allusr > /dev/null 2>&1
 		rm -rf /tmp/untusr > /dev/null 2>&1
 
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		httpack; httpsack; smtpack;
 	fi
 elif [[ ! -z ${HTTP_OUT_ACK} ]] && [[ -z ${HTTPS_OUT_ACK} ]]; then
-	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	httpack; https; smtpack;
 elif [[ -z ${HTTP_OUT_ACK} ]] && [[ ! -z ${HTTPS_OUT_ACK} ]]; then
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	http; httpsack; smtpack;
 elif [[ ! -z ${HTTP_OUT_ACK} ]] && [[ ! -z ${HTTPS_OUT_ACK} ]]; then
-	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTP_OUT_ACK} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	httpack; httpsack; smtpack;
 else
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -s 0/0 -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	http; https; smtpack;
 fi
 
 ${IPT} -A INPUT -i ${PUB_IF} -p tcp --sport 80 -m conntrack --ctstate ESTABLISHED -j ACCEPT
@@ -438,7 +419,7 @@ ${IPT} -A INPUT -i ${PUB_IF} -p tcp --sport 25 -m conntrack --ctstate ESTABLISHE
 # allow trusted users unlimited outbound
 for usr in ${TRUSTED_USERS}
 do
-	#${IPT} -I OUTPUT -o ${PUB_IF} -j LOG --log-uid --log-prefix "[FW] ${usr} " --- disabled because too much logging spoof
+	# ${IPT} -I OUTPUT -o ${PUB_IF} -j LOG --log-uid --log-prefix "[FW] ${usr} " ### disabled because too much logging spoof
 	${IPT} -I OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -j ACCEPT
 done
 
