@@ -404,8 +404,4 @@ if [[ ${fbrestart} == "1" ]]; then
     /etc/init.d/fail2ban restart
 fi
 
-# Cleanup
-rm -rf /tmp/allusr > /dev/null 2>&1
-rm -rf /tmp/untusr > /dev/null 2>&1
-
 exit 0
