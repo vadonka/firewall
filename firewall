@@ -350,71 +350,34 @@ httpsack()
 	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTPS OUT UID "
 	${IPT} -A OUTPUT -o ${PUB_IF} -m geoip --dst-cc ${HTTPS_OUT_ACK} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 }
-smtpack()
-{
-	${IPT} -A OUTPUT -o ${PUB_IF} -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SMTP OUT UID "
-	${IPT} -A OUTPUT -o ${PUB_IF} -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-}
 
-if [[ ${ispconfig} == "1" ]]; then
-	if [[ -z ${UNTRUST_ISPUSER} ]] && [[ -z ${HTTP_OUT_ACK} ]] && [[ -z ${HTTPS_OUT_ACK} ]]; then
-		http; https; smtpack;
-	elif [[ ! -z ${UNTRUST_ISPUSER} ]] && [[ -z ${HTTP_ACK} ]] && [[ -z ${HTTPS_ACK} ]]; then
-		grep ^web /etc/passwd | awk -F ':' '{print $1}' > /tmp/allusr
-		echo ${UNTRUST_ISPUSER} | tr ' ' '\n' > /tmp/untusr
-
-		TRUSTED_WEB_USERS=$(diff -c /tmp/allusr /tmp/untusr | egrep -e "^- |^! " | cut -b3- | tr '\n' ' ')
-
-		for usr in ${TRUSTED_WEB_USERS}
-			do
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTP OUT UID "
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTPS OUT UID "
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SMTP OUT UID "
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		done
-
-		rm -rf /tmp/allusr > /dev/null 2>&1
-		rm -rf /tmp/untusr > /dev/null 2>&1
-	elif [[ -z ${UNTRUST_ISPUSER} ]] && [[ ! -z ${HTTP_OUT_ACK} ]] && [[ -z ${HTTPS_OUT_ACK} ]]; then
-		httpack; https; smtpack;
-	elif [[ -z ${UNTRUST_ISPUSER} ]] && [[ -z ${HTTP_OUT_ACK} ]] && [[ ! -z ${HTTPS_OUT_ACK} ]]; then
-		http; httpsack; smtpack;
-	elif [[ -z ${UNTRUST_ISPUSER} ]] && [[ ! -z ${HTTP_OUT_ACK} ]] && [[ ! -z ${HTTPS_OUT_ACK} ]]; then
-		httpack; httpsack; smtpack;
-	elif [[ ! -z ${UNTRUST_ISPUSER} ]] && [[ ! -z ${HTTP_ACK} ]] && [[ ! -z ${HTTPS_ACK} ]]; then
-		grep ^web /etc/passwd | awk -F ':' '{print $1}' > /tmp/allusr
-		echo ${UNTRUST_ISPUSER} | tr ' ' '\n' > /tmp/untusr
-
-		TRUSTED_WEB_USERS=$(diff -c /tmp/allusr /tmp/untusr | egrep -e "^- |^! " | cut -b3- | tr '\n' ' ')
-
-		for usr in ${TRUSTED_WEB_USERS}
-			do
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTP OUT UID "
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTPS OUT UID "
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SMTP OUT UID "
-			${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		done
-		rm -rf /tmp/allusr > /dev/null 2>&1
-		rm -rf /tmp/untusr > /dev/null 2>&1
-
-		httpack; httpsack; smtpack;
-	fi
-elif [[ ! -z ${HTTP_OUT_ACK} ]] && [[ -z ${HTTPS_OUT_ACK} ]]; then
-	httpack; https; smtpack;
-elif [[ -z ${HTTP_OUT_ACK} ]] && [[ ! -z ${HTTPS_OUT_ACK} ]]; then
-	http; httpsack; smtpack;
-elif [[ ! -z ${HTTP_OUT_ACK} ]] && [[ ! -z ${HTTPS_OUT_ACK} ]]; then
-	httpack; httpsack; smtpack;
-else
-	http; https; smtpack;
+if [[ ${ispconfig} == "1" ]] && [[ ! -z ${UNTRUST_ISPUSER} ]]; then
+	for usr in ${UNTRUST_ISPUSER}
+	do
+		${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] BLOCKED HTTP OUT UID "
+		${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] BLOCKED HTTPS OUT UID "
+		${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j DROP
+		${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -p tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j DROP
+	done
 fi
 
+if [[ ! -z ${HTTP_OUT_ACK} ]] && [[ -z ${HTTPS_OUT_ACK} ]]; then
+	httpack; https;
+elif [[ -z ${HTTP_OUT_ACK} ]] && [[ ! -z ${HTTPS_OUT_ACK} ]]; then
+	http; httpsack;
+elif [[ ! -z ${HTTP_OUT_ACK} ]] && [[ ! -z ${HTTPS_OUT_ACK} ]]; then
+	httpack; httpsack;
+elif [[ -z ${HTTP_OUT_ACK} ]] && [[ -z ${HTTPS_OUT_ACK} ]]; then
+	http; https;
+fi
+
+# HTTP, HTTPS ACK
 ${IPT} -A INPUT -i ${PUB_IF} -p tcp --sport 80 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 ${IPT} -A INPUT -i ${PUB_IF} -p tcp --sport 443 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+
+# SMTP
+${IPT} -A OUTPUT -o ${PUB_IF} -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SMTP OUT UID "
+${IPT} -A OUTPUT -o ${PUB_IF} -d ${SMTP_HOST} -p tcp --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 ${IPT} -A INPUT -i ${PUB_IF} -p tcp --sport 25 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
 # allow trusted users unlimited outbound
@@ -441,5 +404,8 @@ if [[ ${fbrestart} == "1" ]]; then
     /etc/init.d/fail2ban restart
 fi
 
-exit 0
+# Cleanup
+rm -rf /tmp/allusr > /dev/null 2>&1
+rm -rf /tmp/untusr > /dev/null 2>&1
 
+exit 0
