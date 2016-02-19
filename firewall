@@ -105,11 +105,7 @@ if [ -e /usr/local/ispconfig ]; then
 	if [[ ${ispport1} == "1" ]] && [[ ${ispport2} == "1" ]]; then
 		echo "ISPConfig..."
 		ispconfig="1"
-	else
-		echo "..."
 	fi
-else
-	echo "..."
 fi
 
 ### Detect Fail2Ban
@@ -120,17 +116,11 @@ if [ -e /etc/fail2ban/fail2ban.conf ]; then
 	pidfile=$(echo ${config_detect} | cut -b${pidfile_start}-)
 	if [ -e ${pidfile} ]; then
 	f2b_pid=$(cat ${pidfile})
-	if ps -p ${f2b_pid} > /dev/null; then
-		echo "Fail2Ban..."
-		fbrestart="1"
-	else
-		echo "..."
+		if ps -p ${f2b_pid} > /dev/null; then
+			echo "Fail2Ban..."
+			fbrestart="1"
+		fi
 	fi
-	else
-		echo "..."
-	fi
-else
-	echo "..."
 fi
 
 ### Detect FTP
@@ -139,8 +129,6 @@ if (: < /dev/tcp/${LOCAL_IP}/21) 2>/dev/null
 then
 	echo "FTP..."
 	ftp="1"
-else
-	echo "..."
 fi
 
 ### Detect DNS Server
@@ -149,8 +137,6 @@ if (: < /dev/tcp/${LOCAL_IP}/53) 2>/dev/null
 then
 	echo "DNS..."
 	dns="1"
-else
-	echo "..."
 fi
 
 # DROP and close everything 
