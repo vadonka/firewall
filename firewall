@@ -103,7 +103,7 @@ if [ -e /usr/local/ispconfig ]; then
 		ispport2="1"
 	fi
 	if [[ ${ispport1} == "1" ]] && [[ ${ispport2} == "1" ]]; then
-		echo "ISPConfig..."
+		echo -n "ISPConfig..."
 		ispconfig="1"
 	fi
 fi
@@ -117,7 +117,7 @@ if [ -e /etc/fail2ban/fail2ban.conf ]; then
 	if [ -e ${pidfile} ]; then
 	f2b_pid=$(cat ${pidfile})
 		if ps -p ${f2b_pid} > /dev/null; then
-			echo "Fail2Ban..."
+			echo -n "Fail2Ban..."
 			fbrestart="1"
 		fi
 	fi
@@ -127,7 +127,7 @@ fi
 ftp="0"
 if (: < /dev/tcp/${LOCAL_IP}/21) 2>/dev/null
 then
-	echo "FTP..."
+	echo -n "FTP..."
 	ftp="1"
 fi
 
@@ -135,7 +135,7 @@ fi
 dns="0"
 if (: < /dev/tcp/${LOCAL_IP}/53) 2>/dev/null
 then
-	echo "DNS..."
+	echo -n "DNS..."
 	dns="1"
 fi
 
