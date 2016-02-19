@@ -72,10 +72,9 @@ LOCAL_IP=$(ip addr show ${PUB_IF} | grep 'inet ' | awk -F ' ' '{print $2}' | awk
 ### Start firewall ###
 startproc()
 {
-echo "Setting $(hostname) Firewall..."
+echo -n "(Re)starting $(hostname) Firewall..."
 
 ### Detect WEB Server
-echo -n "WEB..."
 webhttp="0"
 webhttps="0"
 
@@ -89,14 +88,8 @@ then
 	echo -n "HTTPS..."
 	webhttps="1"
 fi
-if [[ ${webhttp} == "0" ]] && [[ ${webhttps} == "0" ]]; then
-	echo "no web port open."
-else
-	echo "is open."
-fi
 
 ### Detect ISPConfig
-echo -n "ISPConfig..."
 ispconfig="0"
 if [ -e /usr/local/ispconfig ]; then
 	ispport1="0"
@@ -110,17 +103,16 @@ if [ -e /usr/local/ispconfig ]; then
 		ispport2="1"
 	fi
 	if [[ ${ispport1} == "1" ]] && [[ ${ispport2} == "1" ]]; then
-		echo "detected and default ports are open."
+		echo "ISPConfig..."
 		ispconfig="1"
 	else
-		echo "detected but defaults port are not open, check ispconfig web configuration."
+		echo "..."
 	fi
 else
-	echo "not detected."
+	echo "..."
 fi
 
 ### Detect Fail2Ban
-echo -n "Fail2Ban..."
 fbrestart="0"
 if [ -e /etc/fail2ban/fail2ban.conf ]; then
 	config_detect=$(grep -e "pidfile.*.pid" /etc/fail2ban/fail2ban.conf)
@@ -129,38 +121,36 @@ if [ -e /etc/fail2ban/fail2ban.conf ]; then
 	if [ -e ${pidfile} ]; then
 	f2b_pid=$(cat ${pidfile})
 	if ps -p ${f2b_pid} > /dev/null; then
-		echo "detected and running."
+		echo "Fail2Ban..."
 		fbrestart="1"
 	else
-		echo "detected but not running."
+		echo "..."
 	fi
 	else
-		echo "detected but not running."
+		echo "..."
 	fi
 else
-	echo "not detected."
+	echo "..."
 fi
 
 ### Detect FTP
-echo -n "FTP..."
 ftp="0"
 if (: < /dev/tcp/${LOCAL_IP}/21) 2>/dev/null
 then
-	echo "detected."
+	echo "FTP..."
 	ftp="1"
 else
-	echo "not detected."
+	echo "..."
 fi
 
 ### Detect DNS Server
-echo -n "DNS..."
 dns="0"
 if (: < /dev/tcp/${LOCAL_IP}/53) 2>/dev/null
 then
-	echo "detected."
+	echo "DNS..."
 	dns="1"
 else
-	echo "not detected."
+	echo "..."
 fi
 
 # DROP and close everything 
@@ -411,12 +401,15 @@ ${IPT} -A INPUT -j DROP
 
 # Restart Fail2Ban if needed
 if [[ ${fbrestart} == "1" ]]; then
-    /etc/init.d/fail2ban restart
+    /etc/init.d/fail2ban restart > /dev/null 2>&1
 fi
+
+echo "Done."
 }
 
 stopproc()
 {
+echo -n "Stopping $(hostname) Firewall..."
 ${IPT} -F
 ${IPT} -X
 ${IPT} -t nat -F
@@ -426,6 +419,7 @@ ${IPT} -t mangle -X
 ${IPT} -P INPUT ACCEPT
 ${IPT} -P OUTPUT ACCEPT
 ${IPT} -P FORWARD ACCEPT
+echo "Done."
 }
 
 if [[ ${start} == "1" ]] && [[ ${stop} == "0" ]]; then
