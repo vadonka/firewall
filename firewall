@@ -57,7 +57,8 @@ SMTP_OUT="127.0.0.1"
 CUST_IN_PORTS=""
 CUST_OUT_PORTS=""
 
-### Custom input/output opened ports by username/country, username:proto:port:country separated with space, example: "john:tcp:4312:HU,AU,AG" 
+### Custom input/output opened ports by username/country,
+#   username:proto:port:country separated with space, example: "john:tcp:4312:HU,AU,AG"
 CUSTUSR_IN_PORTS=""
 CUSTUSR_OUT_PORTS=""
 
