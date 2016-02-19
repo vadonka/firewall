@@ -57,9 +57,7 @@ SMTP_OUT="127.0.0.1"
 CUST_IN_PORTS=""
 CUST_OUT_PORTS=""
 
-### Custom input/output opened ports by username/country,
-#   username:proto:port:country separated with space, example: "john:tcp:4312:HU,AU,AG"
-CUSTUSR_IN_PORTS=""
+# Custom output opened ports by username/country, username:proto:port:country separated with space, example: "john:tcp:4312:HU,AU"
 CUSTUSR_OUT_PORTS=""
 
 EOF
@@ -205,6 +203,43 @@ ${IPT} -A INPUT -i ${PUB_IF} -m pkttype --pkt-type multicast -j DROP
 
 ${IPT} -A INPUT -i ${PUB_IF} -m conntrack --ctstate INVALID -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] Invalid "
 ${IPT} -A INPUT -i ${PUB_IF} -m conntrack --ctstate INVALID -j DROP
+
+# Custom input/output ports
+if [[ ! -z ${CUST_IN_PORTS} ]]; then
+	echo -n "Custom input ports..."
+	for custin in ${CUST_IN_PORTS}
+	do
+		proto=$(echo ${custin} | awk -F ':' '{print $1}')
+		port=$(echo ${custin} | awk -F ':' '{print $2}')
+		${IPT} -A INPUT -i ${PUB_IF} -p ${proto} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	done
+fi
+
+if [[ ! -z ${CUST_OUT_PORTS} ]]; then
+	echo -n "Custom output ports..."
+	for custout in ${CUST_OUT_PORTS}
+	do
+		proto=$(echo ${custout} | awk -F ':' '{print $1}')
+		port=$(echo ${custout} | awk -F ':' '{print $2}')
+		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${proto}:${port} OUT UID "
+		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	done
+fi
+
+if [[ ! -z ${CUSTUSR_OUT_PORTS} ]]; then
+	echo -n "Custom output user ports..."
+	for custusrout in ${CUSTUSR_OUT_PORTS}
+	do
+		usr=$(echo ${custusrout} | awk -F ':' '{print $1}')
+		proto=$(echo ${custusrout} | awk -F ':' '{print $2}')
+		port=$(echo ${custusrout} | awk -F ':' '{print $3}')
+		country=$(echo ${custusrout} | awk -F ':' '{print $4}')
+		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --dst-cc ${country} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${usr}:${proto}:${port}:${country} OUT UID "
+		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --dst-cc ${country} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j DROP
+	done
+fi
 
 # Allow communication from selected trusted networks/ips
 for ip in ${TRUSTED_NET}
@@ -399,56 +434,6 @@ else
 	done
 fi
 ${IPT} -A INPUT -i ${PUB_IF} -p tcp --sport 25 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-
-# Custom input/output ports
-if [[ ! -z ${CUST_IN_PORTS} ]]; then
-	echo -n "Custom input ports..."
-	for custin in ${CUST_IN_PORTS}
-	do
-		proto=$(echo ${custin} | awk -F ':' '{print $1}')
-		port=$(echo ${custin} | awk -F ':' '{print $2}')
-		${IPT} -A INPUT -i ${PUB_IF} -p ${proto} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	done
-fi
-
-if [[ ! -z ${CUST_OUT_PORTS} ]]; then
-	echo -n "Custom output ports..."
-	for custout in ${CUST_OUT_PORTS}
-	do
-		proto=$(echo ${custout} | awk -F ':' '{print $1}')
-		port=$(echo ${custout} | awk -F ':' '{print $2}')
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${proto}:${port} OUT UID "
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	done
-fi
-
-# Custom input/output user ports
-if [[ ! -z ${CUSTUSR_IN_PORTS} ]]; then
-	echo -n "Custom input user ports..."
-	for custin in ${CUSTUSR_IN_PORTS}
-	do
-		usr=$(echo ${custin} | awk -F ':' '{print $1}')
-		proto=$(echo ${custin} | awk -F ':' '{print $2}')
-		port=$(echo ${custin} | awk -F ':' '{print $3}')
-		country=$(echo ${custin} | awk -F ':' '{print $4}')
-		${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --src-cc ${country} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --dst-cc ${country} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	done
-fi
-
-if [[ ! -z ${CUSTUSR_OUT_PORTS} ]]; then
-	echo -n "Custom output user ports..."
-	for custout in ${CUSTUSR_OUT_PORTS}
-	do
-		usr=$(echo ${custin} | awk -F ':' '{print $1}')
-		proto=$(echo ${custin} | awk -F ':' '{print $2}')
-		port=$(echo ${custin} | awk -F ':' '{print $3}')
-		country=$(echo ${custin} | awk -F ':' '{print $4}')
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --dst-cc ${country} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${proto}:${port} OUT UID "
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --dst-cc ${country} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	done
-fi
 
 # allow trusted users unlimited outbound
 for usr in ${TRUSTED_USERS}
