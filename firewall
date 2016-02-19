@@ -56,7 +56,11 @@ SMTP_OUT="127.0.0.1"
 ### Custom input/output opened ports, proto:port separated with space, example: "tcp:1010 udp:2020"
 CUST_IN_PORTS=""
 CUST_OUT_PORTS=""
- 
+
+### Custom input/output opened ports by username/country, username:proto:port:country separated with space, example: "john:tcp:4312:HU,AU,AG" 
+CUSTUSR_IN_PORTS=""
+CUSTUSR_OUT_PORTS=""
+
 EOF
 
 echo -e "Done.\n\nPlease setup the configuration file in /usr/local/etc/firewall.conf"
@@ -415,6 +419,33 @@ if [[ ! -z ${CUST_OUT_PORTS} ]]; then
 		port=$(echo ${custout} | awk -F ':' '{print $2}')
 		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${proto}:${port} OUT UID "
 		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	done
+fi
+
+# Custom input/output user ports
+if [[ ! -z ${CUSTUSR_IN_PORTS} ]]; then
+	echo -n "Custom input user ports..."
+	for custin in ${CUSTUSR_IN_PORTS}
+	do
+		usr=$(echo ${custin} | awk -F ':' '{print $1}')
+		proto=$(echo ${custin} | awk -F ':' '{print $2}')
+		port=$(echo ${custin} | awk -F ':' '{print $3}')
+		country=$(echo ${custin} | awk -F ':' '{print $4}')
+		${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --src-cc ${country} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --dst-cc ${country} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	done
+fi
+
+if [[ ! -z ${CUSTUSR_OUT_PORTS} ]]; then
+	echo -n "Custom output user ports..."
+	for custout in ${CUSTUSR_OUT_PORTS}
+	do
+		usr=$(echo ${custin} | awk -F ':' '{print $1}')
+		proto=$(echo ${custin} | awk -F ':' '{print $2}')
+		port=$(echo ${custin} | awk -F ':' '{print $3}')
+		country=$(echo ${custin} | awk -F ':' '{print $4}')
+		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --dst-cc ${country} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${proto}:${port} OUT UID "
+		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --dst-cc ${country} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 	done
 fi
 
