@@ -1,5 +1,13 @@
 #!/bin/bash
 
+if [[ $1 == "stop" ]]; then
+	stop="1"
+	start="0"
+else
+	stop="0"
+	start="1"
+fi
+
 if [ ! -f /usr/local/etc/firewall.conf ]; then
 echo -en "Config file doesn't exsist!\nCreating default config..."
 cat > /usr/local/etc/firewall.conf << EOF
@@ -62,6 +70,8 @@ fi
 LOCAL_IP=$(ip addr show ${PUB_IF} | grep 'inet ' | awk -F ' ' '{print $2}' | awk -F '/' '{print $1}')
 
 ### Start firewall ###
+startproc()
+{
 echo "Setting $(hostname) Firewall..."
 
 ### Detect WEB Server
@@ -402,6 +412,26 @@ ${IPT} -A INPUT -j DROP
 # Restart Fail2Ban if needed
 if [[ ${fbrestart} == "1" ]]; then
     /etc/init.d/fail2ban restart
+fi
+}
+
+stopproc()
+{
+${IPT} -F
+${IPT} -X
+${IPT} -t nat -F
+${IPT} -t nat -X
+${IPT} -t mangle -F
+${IPT} -t mangle -X
+${IPT} -P INPUT ACCEPT
+${IPT} -P OUTPUT ACCEPT
+${IPT} -P FORWARD ACCEPT
+}
+
+if [[ ${start} == "1" ]] && [[ ${stop} == "0" ]]; then
+	startproc;
+elif [[ ${start} == "0" ]] && [[ ${stop} == "1" ]]; then
+	stopproc;
 fi
 
 exit 0
