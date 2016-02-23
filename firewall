@@ -227,13 +227,18 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 		if [[ ${rule} == "allow" ]]; then rule="ACCEPT"; elif [[ ${rule} == "deny" ]]; then rule="DROP"; else rule="unset"; fi
 		if [[ ${direction} == "in" ]]; then direction="INPUT"; elif [[ ${direction} == "out" ]]; then direction="OUTPUT"; else direction="unset"; fi
 		if [[ ! -z ${cntorip} ]]; then
-			if [[ ${cntorip} =~ "^[0-9]+$" ]]; then
-				cntoriprule=${cntorip}
-			else
+			check=$(echo ${cntorip} | grep [^[:alpha:]])
+			if [[ -z ${check} ]]; then
 				if [[ ${direction} == "INPUT" ]]; then
 					cntoriprule="-m geoip --src-cc ${cntorip}"
 				elif [[ ${direction} == "OUTPUT" ]]; then
 					cntoriprule="-m geoip --dst-cc ${cntorip}"
+				fi
+			else
+				if [[ ${direction} == "INPUT" ]]; then
+					cntoriprule="--src ${cntorip}"
+				elif [[ ${direction} == "OUTPUT" ]]; then
+					cntoriprule="--dst ${cntorip}"
 				fi
 			fi
 		else
