@@ -238,7 +238,7 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 			userrule=""
 		fi
 		if [[ ${proto} == "tcp" ]] || [[ ${proto} == "udp" ]]; then proto=${proto}; else proto="unset"; fi
-		if [[ ${port} >= "1" ]] && [[ ${port} <= "65535" ]]; then port=${port}; else port="unset"; fi
+		if [[ ${port} -ge "1" ]] && [[ ${port} -le "65535" ]]; then port=${port}; else port="unset"; fi
 		if [[ ${rule} != "unset" ]] && [[ ${direction} != "unset" ]] && [[ ${proto} != "unset" ]] && [[ ${port} != "unset" ]]; then 
 			if [[ ${direction} == "INPUT" ]]; then
 				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
