@@ -231,9 +231,9 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 				cntoriprule=${cntorip}
 			else
 				if [[ ${direction} == "INPUT" ]]; then
-					cntoriprule="-m geoip --src-cc ${country}"
+					cntoriprule="-m geoip --src-cc ${cntorip}"
 				elif [[ ${direction} == "OUTPUT" ]]; then
-					cntoriprule="-m geoip --dst-cc ${country}"
+					cntoriprule="-m geoip --dst-cc ${cntorip}"
 				fi
 			fi
 		else
