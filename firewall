@@ -54,10 +54,10 @@ HTTPS_OUT=""
 SMTP_OUT="127.0.0.1"
 
 ### Custom input/output rules
-# syntax "rule:direction:country:username:proto:port"
+# syntax "rule:direction:country/ip:username:proto:port"
 # rule: allow or deny (cannot be empty!)
 # direction: in or out (cannot be empty!)
-# country: short GeoIP country code like US,CN,HU (or leave empty)
+# country/ip: short GeoIP country code like US,CN,HU or IP/MASK (or leave empty)
 # username: system username (or leave empty)
 # proto: tcp or udp (or leave empty)
 # port: 1-65535 (or leave empty)
@@ -220,20 +220,24 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 	do
 		rule=$(echo ${cust} | awk -F ':' '{print $1}')
 		direction=$(echo ${cust} | awk -F ':' '{print $2}')
-		country=$(echo ${cust} | awk -F ':' '{print $3}')
+		cntorip=$(echo ${cust} | awk -F ':' '{print $3}')
 		user=$(echo ${cust} | awk -F ':' '{print $4}')
 		proto=$(echo ${cust} | awk -F ':' '{print $5}')
 		port=$(echo ${cust} | awk -F ':' '{print $6}')
 		if [[ ${rule} == "allow" ]]; then rule="ACCEPT"; elif [[ ${rule} == "deny" ]]; then rule="DROP"; else rule="unset"; fi
 		if [[ ${direction} == "in" ]]; then direction="INPUT"; elif [[ ${direction} == "out" ]]; then direction="OUTPUT"; else direction="unset"; fi
-		if [[ ! -z ${country} ]]; then
-			if [[ ${direction} == "INPUT" ]]; then
-				countryrule="-m geoip --src-cc ${country}"
-			elif [[ ${direction} == "OUTPUT" ]]; then
-				countryrule="-m geoip --dst-cc ${country}"
+		if [[ ! -z ${cntorip} ]]; then
+			if [[ ${cntorip} =~ "^[0-9]+$" ]]; then
+				cntoriprule=${cntorip}
+			else
+				if [[ ${direction} == "INPUT" ]]; then
+					cntoriprule="-m geoip --src-cc ${country}"
+				elif [[ ${direction} == "OUTPUT" ]]; then
+					cntoriprule="-m geoip --dst-cc ${country}"
+				fi
 			fi
 		else
-			countryrule=""
+			cntoriprule=""
 		fi
 		if [[ ! -z ${user} ]] && [[ ${direction} == "OUTPUT" ]]; then
 			userrule="-m owner --uid-owner ${user}"
@@ -244,11 +248,11 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 		if [[ ${port} -ge "1" ]] && [[ ${port} -le "65535" ]]; then port=${port}; else port="unset"; fi
 		if [[ ${rule} != "unset" ]] && [[ ${direction} != "unset" ]] && [[ ${proto} != "unset" ]] && [[ ${port} != "unset" ]]; then 
 			if [[ ${direction} == "INPUT" ]]; then
-				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
+				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
 				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ${rule}
 			elif [[ ${direction} == "OUTPUT" ]]; then
-				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${user}:${proto}:${port}:${country}:${rule}"
-				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
+				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${user}:${proto}:${port}:${country}:${rule}"
+				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
 				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} -m conntrack --ctstate ESTABLISHED -j ${rule}
 			fi
 		fi
