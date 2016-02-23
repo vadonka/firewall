@@ -248,10 +248,11 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 		if [[ ${port} -ge "1" ]] && [[ ${port} -le "65535" ]]; then port=${port}; else port="unset"; fi
 		if [[ ${rule} != "unset" ]] && [[ ${direction} != "unset" ]] && [[ ${proto} != "unset" ]] && [[ ${port} != "unset" ]]; then 
 			if [[ ${direction} == "INPUT" ]]; then
+				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] CUSTIN ${proto}:${port}:${rule}"
 				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
 				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ${rule}
 			elif [[ ${direction} == "OUTPUT" ]]; then
-				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${proto}:${port}:${rule}"
+				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] CUSTOUT ${proto}:${port}:${rule}"
 				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
 				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} -m conntrack --ctstate ESTABLISHED -j ${rule}
 			fi
