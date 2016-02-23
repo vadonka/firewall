@@ -64,6 +64,9 @@ SMTP_OUT="127.0.0.1"
 #
 # multip rule separated by space
 # example, allow tcp 1234 input port from US "allow:in:US::tcp:1234"
+#
+# important note: user match can only be use in out direction,
+# it will be ignored in any input rules!
 CUSTOM_RULES=""
 
 EOF
@@ -232,7 +235,7 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 		else
 			countryrule=""
 		fi
-		if [[ ! -z ${user} ]]; then
+		if [[ ! -z ${user} ]] && [[ ${direction} == "OUTPUT" ]]; then
 			userrule="-m owner --uid-owner ${user}"
 		else
 			userrule=""
