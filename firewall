@@ -10,7 +10,7 @@ fi
 
 if [ ! -f /usr/local/etc/firewall.conf ]; then
 echo -en "Config file doesn't exsist!\nCreating default config..."
-cat > /usr/local/etc/firewall.conf << EOF
+cat > /usr/local/etc/firewall.conf #<< EOF
 ### Change this to yes or comment out after setup
 configured=no
 
@@ -22,52 +22,56 @@ PUB_IF="eth0"   # public interface
 LO_IF="lo"      # loopback
 
 ### Trusted networks, separated with space
-TRUSTED_NET="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
+#TRUSTED_NET="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
 
 ### Trusted users, separated with space
-TRUSTED_USERS="root"
+#TRUSTED_USERS="root"
 
 ### Default ALL ispconfig (if installed) WEB USER will be trusted except whos listed in untrusted, separated with space
-UNTRUST_ISPUSER=""
+#UNTRUST_ISPUSER=""
 
-### FTP Passive port range
-FTP_PASV="50000:60000"
-
-### Country only accept, separated with comma, leave empty for unlimited access
-# IMCP allow only from
-ICMP_IN=""
-# FTP allow only from
-FTP_IN=""
-# SSH allow only from
-SSH_IN=""
-## SSH outbound allow to custom IP, separated with space
-SSH_OUT_IP=""
-# ISPConfig webapps and ispapps (tcp 8080,8081) allow only from
-ISPCONF_IN=""
-# HTTP(S) port allow only from/to
-HTTP_IN=""
-HTTPS_IN=""
-HTTP_OUT=""
-HTTPS_OUT=""
-
-### SMTP send allow only this address, separated with space
-SMTP_OUT="127.0.0.1"
+### Country/IP only accept, separated with space
+##  GeoIP two letter country code or IP/MASK
+#   example: "HU 123.123.123.123/26 CN US"
+#   use "any" for unlimited access
+#   if not defined means block all access!
+#
+#ICMP_IN=""					# ICMP inbound rules
+#FTP_IN=""					# FTP inbound rules
+#FTP_PORT="21"				# FTP server port, default: 21
+#FTP_PASV="50000:60000"		# FTP passive port range
+#SSH_IN=""					# SSH inbound rules
+#SSH_PORT="22"				# SSH server port, default: 22
+#SSH_OUT=""					# SSH outbound rules
+#ISPCONF_IN=""				# ISPconfig inbound rules for ports 8080,8081
+#SMTP_IN=""					# SMTP inbound rules for ports 25,465,587
+#SMTP_OUT=""				# SMTP outbound rules for ports 25,465,587
+#POPI_IN=""					# POP3/IMAP inbound rules for ports 110,143,993,995
+#POPI_OUT=""				# POP3/IMAP outbound rules for ports 110,143,993,995
+#HTTP_IN=""					# HTTP inbound rules for port 80
+#HTTPS_IN=""				# HTTPS inbound rules for port 443
+#HTTP_OUT=""				# HTTP outbound rules for port 80
+#HTTPS_OUT=""				# HTTPS outbound rules for port 443
 
 ### Custom input/output rules
 # syntax "rule:direction:country/ip:username:proto:port"
 # rule: allow or deny (cannot be empty!)
 # direction: in or out (cannot be empty!)
-# country/ip: short GeoIP country code like US,CN,HU or IP/MASK (or leave empty)
+# country/ip: GeoIP two letter country code like US,CN,HU or IP/MASK (or leave empty)
 # username: system username (or leave empty)
 # proto: tcp or udp (or leave empty)
 # port: 1-65535 (or leave empty)
 #
-# multip rule separated by space
+# multiple rules write to a new row (one rule/row)
 # example, allow tcp 1234 input port from US "allow:in:US::tcp:1234"
 #
 # important note: user match can only be use in out direction,
 # it will be ignored in any input rules!
-CUSTOM_RULES=""
+#
+#CUSTOM_RULES="
+#allow:in:US::tcp:1234
+#allow:out:123.123.123.123/26:user1:tcp:8000
+#"
 
 EOF
 
@@ -91,9 +95,7 @@ startproc()
 echo -n "(Re)starting $(hostname) Firewall..."
 
 ### Detect WEB Server
-webhttp="0"
-webhttps="0"
-
+webhttp="0"; webhttps="0"
 if (: < /dev/tcp/${LOCAL_IP}/80) 2>/dev/null
 then
 	echo -n "HTTP..."
@@ -108,8 +110,7 @@ fi
 ### Detect ISPConfig
 ispconfig="0"
 if [ -e /usr/local/ispconfig ]; then
-	ispport1="0"
-	ispport2="0"
+	ispport1="0"; ispport2="0"
 	if (: < /dev/tcp/${LOCAL_IP}/8080) 2>/dev/null
 	then
 		ispport1="1"
@@ -140,11 +141,19 @@ if [ -e /etc/fail2ban/fail2ban.conf ]; then
 fi
 
 ### Detect FTP
-ftp="0"
-if (: < /dev/tcp/${LOCAL_IP}/21) 2>/dev/null
-then
-	echo -n "FTP..."
-	ftp="1"
+if [[ -z ${FTP_PORT} ]]; then
+	if (: < /dev/tcp/${LOCAL_IP}/21) 2>/dev/null
+	then
+		FTP_PORT="21"
+		echo -n "FTP..."
+	fi
+else
+	if (: < /dev/tcp/${LOCAL_IP}/${FTP_PORT}) 2>/dev/null
+	then
+		echo -n "FTP..."
+	else
+		FTP_PORT=""
+	fi
 fi
 
 ### Detect DNS Server
@@ -156,11 +165,60 @@ then
 fi
 
 ### Detect SMTP Server
-smtp="0"
+smtp25="0"; smtp465="0"; smtp587="0"
 if (: < /dev/tcp/${LOCAL_IP}/25) 2>/dev/null
 then
 	echo -n "SMTP..."
-	smtp="1"
+	smtp25="1"
+fi
+if (: < /dev/tcp/${LOCAL_IP}/465) 2>/dev/null
+then
+	echo -n "SMTPS..."
+	smtp465="1"
+fi
+if (: < /dev/tcp/${LOCAL_IP}/587) 2>/dev/null
+then
+	echo -n "SUBMISSION..."
+	smtp587="1"
+fi
+
+# Detect POP/IMAP Servers
+pop110="0"; pop995="0"; imap143="0"; imap993="0"
+if (: < /dev/tcp/${LOCAL_IP}/110) 2>/dev/null
+then
+	echo -n "POP3..."
+	pop110="1"
+fi
+if (: < /dev/tcp/${LOCAL_IP}/995) 2>/dev/null
+then
+	echo -n "POP3S..."
+	pop995="1"
+fi
+if (: < /dev/tcp/${LOCAL_IP}/143) 2>/dev/null
+then
+	echo -n "IMAP..."
+	imap143="1"
+fi
+if (: < /dev/tcp/${LOCAL_IP}/993) 2>/dev/null
+then
+	echo -n "IMAPS..."
+	imap993="1"
+fi
+
+# Detect SSH
+if [[ -z ${SSH_PORT} ]]; then
+	if (: < /dev/tcp/${LOCAL_IP}/22) 2>/dev/null
+	then
+		SSH_PORT="22"
+		echo -n "SSHD..."
+	fi
+else
+	if (: < /dev/tcp/${LOCAL_IP}/${SSH_PORT}) 2>/dev/null
+	then
+		echo -n "SSHD..."
+	else
+		SSH_PORT=""
+	fi
 fi
 
 # DROP and close everything 
@@ -253,7 +311,7 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 		if [[ ${port} -ge "1" ]] && [[ ${port} -le "65535" ]]; then port=${port}; else port="unset"; fi
 		if [[ ${rule} != "unset" ]] && [[ ${direction} != "unset" ]] && [[ ${proto} != "unset" ]] && [[ ${port} != "unset" ]]; then 
 			if [[ ${direction} == "INPUT" ]]; then
-				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] CUSTIN ${proto}:${port}:${rule}"
+				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] CUSTIN ${proto}:${port}:${rule}"
 				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
 				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ${rule}
 			elif [[ ${direction} == "OUTPUT" ]]; then
@@ -266,6 +324,7 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 fi
 
 # Allow communication from selected trusted networks/ips
+if [[ -z ${TRUSTED_NET} ]]; then TRUSTED_NET="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"; fi
 for ip in ${TRUSTED_NET}
 do
 	${IPT} -A INPUT -i ${PUB_IF} -s ${ip} -d ${LOCAL_IP} -j ACCEPT
@@ -277,20 +336,80 @@ ${IPT} -A INPUT -p tcp -m tcp --sport 0:1023 ! --tcp-flags FIN,SYN,RST,ACK SYN -
 ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
 # allow incoming ICMP ping pong stuff
-if [[ -z ${ICMP_IN} ]]; then
-	${IPT} -A INPUT -i ${PUB_IF} -p icmp --icmp-type 8 -m conntrack --ctstate NEW,ESTABLISHED,RELATED -m limit --limit 30/sec  -j ACCEPT
-else
-	${IPT} -A INPUT -i ${PUB_IF} -m geoip --src-cc ${ICMP_IN} -p icmp --icmp-type 8 -m conntrack --ctstate NEW,ESTABLISHED,RELATED -m limit --limit 30/sec  -j ACCEPT
-fi
-${IPT} -A OUTPUT -o ${PUB_IF} -p icmp --icmp-type 0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+icmpin()
+{
+	${IPT} -A INPUT -i ${PUB_IF} -p icmp ${icmpsrc} --icmp-type 8 -m conntrack --ctstate NEW,ESTABLISHED,RELATED -m limit --limit 30/sec  -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p icmp --icmp-type 0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+}
 
-# allow incoming SSH
-if [[ -z ${SSH_IN} ]]; then
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-else
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp -m geoip --src-cc ${SSH_IN} --sport 1024:65535 --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+if [[ ! -z ${ICMP_IN} ]]; then
+	if [[ ${ICMP_IN} == "any" ]]; then
+		icmpsrc="-s 0/0"; icmpin;
+	else
+		for i in ${ICMP_IN}
+		do
+			check=$(echo ${i} | grep [^[:alpha:]])
+			if [[ -z ${check} ]]; then
+				icmpsrc="-m geoip --src-cc ${i}"
+			else
+				icmpsrc="-s ${i}"
+			fi
+			icmpin;
+		done
+	fi
 fi
-${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 22 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+
+# SSH in/out
+sshin()
+{
+	if [[ ! -z ${SSH_PORT} ]]; then
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${sshsrc} --sport 1024:65535 --dport ${SSH_PORT} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] SSH IN "
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${sshsrc} --sport 1024:65535 --dport ${SSH_PORT} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${SSH_PORT} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+}
+sshout()
+{
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${sshdst} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SSH OUT "
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${sshdst} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 22 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+}
+
+if [[ ! -z ${SSH_PORT} ]]; then
+	if [[ ! -z ${SSH_IN} ]]; then
+		if [[ ${SSH_IN} == "any" ]]; then
+			sshsrc="-s 0/0"; sshin;
+		else
+			for s in ${SSH_IN}
+			do
+				check=$(echo ${s} | grep [^[:alpha:]])
+				if [[ -z ${check} ]]; then
+					sshsrc="-m geoip --src-cc ${s}"
+				else
+					sshsrc="-s ${s}"
+				fi
+				sshin;
+			done
+		fi
+	fi
+fi
+
+if [[ ! -z ${SSH_OUT} ]]; then
+	if [[ ${SSH_OUT} == "any" ]]; then
+		sshdst="-s 0/0"; sshout;
+	else
+		for s in ${SSH_OUT}
+		do
+			check=$(echo ${s} | grep [^[:alpha:]])
+			if [[ -z ${check} ]]; then
+				sshdst="-m geoip --src-cc ${s}"
+			else
+				sshdst="-s ${s}"
+			fi
+			sshout;
+		done
+	fi
+fi
 
 # allow incoming HTTP(S) port 80,443
 if [[ ${webhttp} == "1" ]]; then
@@ -313,37 +432,56 @@ if [[ ${webhttps} == "1" ]]; then
 fi
 
 # allow incoming ISPCONFIG HTTP(S) port 8080,8081
+ispconfin()
+{
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp -m geoip --src-cc ${ispconfsrc} --sport 1024:65535 --match multiport --dports 8080,8081 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --match multiport --sports 8080,8081 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+}
+
 if [[ ${ispconfig} == "1" ]]; then
-	if [[ -z ${ISPCONF_IN} ]]; then
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 8080 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 8081 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	else
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp -m geoip --src-cc ${ISPCONF_IN} --sport 1024:65535 --dport 8080 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp -m geoip --src-cc ${ISPCONF_IN} --sport 1024:65535 --dport 8081 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	if [[ ! -z ${ISPCONF_IN} ]]; then
+		if [[ ${ISPCONF_IN} == "any" ]]; then
+			ispconfsrc="-s 0/0"; ispconfin;
+		else
+			for i in ${ISPCONF_IN}
+			do
+				check=$(echo ${i} | grep [^[:alpha:]])
+				if [[ -z ${check} ]]; then
+					ispconfsrc="-m geoip --src-cc ${i}"
+				else
+					ispconfsrc="-s ${i}"
+				fi
+				ispconfin;
+			done
+		fi
 	fi
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 8080 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 8081 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 fi
 
 # allow incoming FTP
-if [[ ${ftp} == "1" ]]; then
-	if [[ -z ${FTP_IN} ]]; then
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 20 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 21 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	else
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp -m geoip --src-cc ${FTP_IN} --sport 1024:65535 --dport 20 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp -m geoip --src-cc ${FTP_IN} --sport 1024:65535 --dport 21 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	fi
-	if [[ ! -z ${FTP_PASV} ]]; then
-		if [[ -z ${FTP_IN} ]]; then
-			${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport ${FTP_PASV} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+ftpin()
+{
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${ftpsrc} --sport 1024:65535 --dport ${FTP_PORT} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${ftpsrc} --sport 1024:65535 --dport ${FTP_PASV} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${FTP_PORT} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+}
+
+if [[ ! -z ${FTP_PORT} ]]; then
+	if [[ ! -z ${FTP_IN} ]]; then
+		if [[ ${FTP_IN} == "any" ]]; then
+			ftpsrc="-s 0/0"; ftpin;
 		else
-			${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp -m geoip --src-cc ${FTP_IN} --sport 1024:65535 --dport ${FTP_PASV} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+			for f in ${FTP_IN}
+			do
+				check=$(echo ${f} | grep [^[:alpha:]])
+				if [[ -z ${check} ]]; then
+					ftpsrc="-m geoip --src-cc ${f}"
+				else
+					ftpsrc="-s ${f}"
+				fi
+				ftpin;
+			done
 		fi
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${FTP_PASV} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 20 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 21 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 fi
 
 # allow incoming DNS
@@ -354,72 +492,43 @@ if [[ ${dns} == "1" ]]; then
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 fi
 
-# allow outgoing DNS and LOG
-${IPT} -A OUTPUT -o ${PUB_IF} -p udp -m udp --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] DNS"
+# allow outgoing DNS
 ${IPT} -A OUTPUT -o ${PUB_IF} -p udp -m udp --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 ${IPT} -A INPUT -i ${PUB_IF} -p udp -m udp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] DNS"
 ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
-# allow outgoing NTP and LOG
-${IPT} -A OUTPUT -o ${PUB_IF} -p udp -m udp --dport 123 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] NTP "
+# allow outgoing NTP
 ${IPT} -A OUTPUT -o ${PUB_IF} -p udp -m udp --dport 123 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 ${IPT} -A INPUT -i ${PUB_IF} -p udp -m udp --sport 123 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-
-# allow outgoing SSH and LOG
-if [[ -z ${SSH_IN} ]] && [[ -z ${SSH_OUT_IP} ]]; then
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SSH "
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-elif [[ ! -z ${SSH_IN} ]] && [[ -z ${SSH_OUT_IP} ]]; then
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${SSH_IN} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SSH "
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${SSH_IN} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-elif [[ -z ${SSH_IN} ]] && [[ ! -z ${SSH_OUT_IP} ]]; then
-	for sshoip in ${SSH_OUT_IP}
-		do
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -d ${sshoip} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SSH "
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -d ${sshoip} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	done
-elif [[ ! -z ${SSH_IN} ]] && [[ ! -z ${SSH_OUT_IP} ]]; then
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${SSH_IN} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SSH "
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${SSH_IN} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	for sshoip in ${SSH_OUT_IP}
-		do
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -d ${sshoip} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SSH "
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -d ${sshoip} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	done
-fi
-${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 22 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
 # allow outgoing HTTP,SMTP and LOG for all ispconfig user except untrusted
 http()
 {
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTP OUT UID "
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 }
 https()
 {
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTPS OUT UID "
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 }
 httpack()
 {
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTP_OUT} --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTP OUT UID "
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTP_OUT} --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTP_OUT} --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 }
 httpsack()
 {
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTPS_OUT} --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTPS OUT UID "
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTPS_OUT} --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTPS_OUT} --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 }
 
 if [[ ${ispconfig} == "1" ]] && [[ ! -z ${UNTRUST_ISPUSER} ]]; then
 	for usr in ${UNTRUST_ISPUSER}
 	do
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] BLOCKED HTTP OUT UID "
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] BLOCKED HTTPS OUT UID "
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j DROP
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j DROP
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --match multiport --dports 80,443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] BLOCKED HTTP(S) OUT "
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --match multiport --dports 80,443 -m conntrack --ctstate NEW,ESTABLISHED -j DROP
 	done
 fi
 
@@ -434,32 +543,144 @@ elif [[ -z ${HTTP_OUT} ]] && [[ -z ${HTTPS_OUT} ]]; then
 fi
 
 # HTTP, HTTPS ACK
-${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --match multiport --sports 80,443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
-# SMTP IN/OUT
-if [[ ${smtp} == "1" ]]; then
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 465 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 587 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 25 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 465 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 587 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+# SMTP IN/OUT, POP3/IMAP IN OUT
+smtpin()
+{
+	if [[ ${smtp25} == "1" ]]; then
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] SMTP IN 25 "
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 25 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+	if [[ ${smtp465} == "1" ]]; then
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 465 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] SMTP IN 465 "
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 465 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 465 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+	if [[ ${smtp587} == "1" ]]; then
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 587 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] SMTP IN 587 "
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 587 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 587 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+}
+
+smtpout()
+{
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 ${smtpdst} --match multiport --dports 25,465,587 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 ${smtpdst} --match multiport --dports 25,465,587 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --match multiport --sports 25,465,587 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+}
+
+popin()
+{
+	if [[ ${pop110} == "1" ]]; then
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 110 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] POP3 IN 110 "
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 110 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 110 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+	if [[ ${pop995} == "1" ]]; then
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 995 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] POP3 IN 995 "
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 995 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 995 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+	if [[ ${imap143} == "1" ]]; then
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 143 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] IMAP IN 143 "
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 143 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 143 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+	if [[ ${imap993} == "1" ]]; then
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 993 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] POP3 IN 993 "
+		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 993 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 993 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+}
+
+popout()
+{
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 ${popidst} --match multiport --dports 110,143,993,995 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] POP/IMAP OUT "
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 ${popidst} --match multiport --dports 110,143,993,995 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --match multiport --sports 110,143,993,995 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+}
+
+# SMTP IN
+if [[ ! -z ${SMTP_IN} ]]; then
+	if [[ ${SMTP_IN} == "any" ]]; then
+		smtpsrc="-s 0/0"
+		smtpin;
+	else
+		for s in ${SMTP_IN}
+		do
+			check=$(echo ${s} | grep [^[:alpha:]])
+			if [[ -z ${check} ]]; then
+				smtpsrc="-m geoip --src-cc ${s}"
+			else
+				smtpsrc="-s ${s}"
+			fi
+			smtpin;
+		done
+	fi
 fi
 
-if [[ -z ${SMTP_OUT} ]]; then
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SMTP OUT UID "
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-else
-	for smtpout in ${SMTP_OUT}
-	do
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 -d ${smtpout} --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SMTP OUT UID "
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65525 -d ${smtpout} --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	done
+# SMTP OUT
+if [[ ! -z ${SMTP_OUT} ]]; then
+	if [[ ${SMTP_OUT} == "any" ]]; then
+		smtpdst="-d 0/0"
+		smtpout;
+	else
+		for s in ${SMTP_OUT}
+		do
+			check=$(echo ${s} | grep [^[:alpha:]])
+			if [[ -z ${check} ]]; then
+				smtpdst="-m geoip --dst-cc ${s}"
+			else
+				smtpdst="-d ${s}"
+			fi
+			smtpout;
+		done
+	fi
 fi
-${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 25 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+
+# POP/IMAP IN
+if [[ ! -z ${POPI_IN} ]]; then
+	if [[ ${POPI_IN} == "any" ]]; then
+		popisrc="-s 0/0"
+		popin;
+	else
+		for s in ${POPI_IN}
+		do
+			check=$(echo ${s} | grep [^[:alpha:]])
+			if [[ -z ${check} ]]; then
+				popisrc="-m geoip --src-cc ${s}"
+			else
+				popisrc="-s ${s}"
+			fi
+			popin;
+		done
+	fi
+fi
+
+# POP/IMAP OUT
+if [[ ! -z ${POPI_OUT} ]]; then
+	if [[ ${POPI_OUT} == "any" ]]; then
+		popidst="-d 0/0"
+		popout;
+	else
+		for s in ${POPI_OUT}
+		do
+			check=$(echo ${s} | grep [^[:alpha:]])
+			if [[ -z ${check} ]]; then
+				popidst="-m geoip --dst-cc ${s}"
+			else
+				popidst="-d ${s}"
+			fi
+			popout;
+		done
+	fi
+fi
 
 # allow trusted users unlimited outbound
+if [[ -z ${TRUSTED_USERS} ]]; then TRUSTED_USERS="root"; fi
 for usr in ${TRUSTED_USERS}
 do
 	# ${IPT} -I OUTPUT -o ${PUB_IF} -j LOG --log-uid --log-prefix "[FW] ${usr} " ### disabled because too much logging spoof
@@ -473,7 +694,7 @@ fi
 
 #######################
 # drop and log everything else
-${IPT} -A INPUT -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] DEFAULT DROP UID "
+${IPT} -A INPUT -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] DEFAULT DROP "
 ${IPT} -A INPUT -j DROP
 
 # Restart Fail2Ban if needed
