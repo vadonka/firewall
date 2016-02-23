@@ -244,7 +244,7 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
 				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ${rule}
 			elif [[ ${direction} == "OUTPUT" ]]; then
-				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${user}:${proto}:${port}:${country} OUT ${rule}"
+				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${user}:${proto}:${port}:${country}:${rule}"
 				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
 				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} -m conntrack --ctstate ESTABLISHED -j ${rule}
 			fi
