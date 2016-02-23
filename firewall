@@ -10,7 +10,7 @@ fi
 
 if [ ! -f /usr/local/etc/firewall.conf ]; then
 echo -en "Config file doesn't exsist!\nCreating default config..."
-cat > /usr/local/etc/firewall.conf #<< EOF
+cat > /usr/local/etc/firewall.conf << EOF
 ### Change this to yes or comment out after setup
 configured=no
 
