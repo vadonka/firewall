@@ -53,12 +53,18 @@ HTTPS_OUT=""
 ### SMTP send allow only this address, separated with space
 SMTP_OUT="127.0.0.1"
 
-### Custom input/output opened ports, proto:port separated with space, example: "tcp:1010 udp:2020"
-CUST_IN_PORTS=""
-CUST_OUT_PORTS=""
-
-# Custom output opened ports by username/country, username:proto:port:country separated with space, example: "john:tcp:4312:HU,AU"
-CUSTUSR_OUT_PORTS=""
+### Custom input/output rules
+# syntax "rule:direction:country:username:proto:port"
+# rule: allow or deny (cannot be empty!)
+# direction: in or out (cannot be empty!)
+# country: short GeoIP country code like US,CN,HU (or leave empty)
+# username: system username (or leave empty)
+# proto: tcp or udp (or leave empty)
+# port: 1-65535 (or leave empty)
+#
+# multip rule separated by space
+# example, allow tcp 1234 input port from US "allow:in:US::tcp:1234"
+CUSTOM_RULES=""
 
 EOF
 
@@ -204,40 +210,45 @@ ${IPT} -A INPUT -i ${PUB_IF} -m pkttype --pkt-type multicast -j DROP
 ${IPT} -A INPUT -i ${PUB_IF} -m conntrack --ctstate INVALID -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] Invalid "
 ${IPT} -A INPUT -i ${PUB_IF} -m conntrack --ctstate INVALID -j DROP
 
-# Custom input/output ports
-if [[ ! -z ${CUST_IN_PORTS} ]]; then
-	echo -n "Custom input ports..."
-	for custin in ${CUST_IN_PORTS}
+# Custom input/output rules
+if [[ ! -z ${CUSTOM_RULES} ]]; then
+	echo -n "Custom input/output user rules..."
+	for cust in ${CUSTOM_RULES}
 	do
-		proto=$(echo ${custin} | awk -F ':' '{print $1}')
-		port=$(echo ${custin} | awk -F ':' '{print $2}')
-		${IPT} -A INPUT -i ${PUB_IF} --sport 1024:65535 -p ${proto} -m ${proto} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} --sport ${port} -p ${proto} -m ${proto} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	done
-fi
-
-if [[ ! -z ${CUST_OUT_PORTS} ]]; then
-	echo -n "Custom output ports..."
-	for custout in ${CUST_OUT_PORTS}
-	do
-		proto=$(echo ${custout} | awk -F ':' '{print $1}')
-		port=$(echo ${custout} | awk -F ':' '{print $2}')
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${proto}:${port} OUT UID "
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	done
-fi
-
-if [[ ! -z ${CUSTUSR_OUT_PORTS} ]]; then
-	echo -n "Custom output user ports..."
-	for custusrout in ${CUSTUSR_OUT_PORTS}
-	do
-		usr=$(echo ${custusrout} | awk -F ':' '{print $1}')
-		proto=$(echo ${custusrout} | awk -F ':' '{print $2}')
-		port=$(echo ${custusrout} | awk -F ':' '{print $3}')
-		country=$(echo ${custusrout} | awk -F ':' '{print $4}')
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --dst-cc ${country} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${usr}:${proto}:${port}:${country} OUT UID "
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} -m geoip --dst-cc ${country} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m owner --uid-owner ${usr} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j DROP
+		rule=$(echo ${cust} | awk -F ':' '{print $1}')
+		direction=$(echo ${cust} | awk -F ':' '{print $2}')
+		country=$(echo ${cust} | awk -F ':' '{print $3}')
+		user=$(echo ${cust} | awk -F ':' '{print $4}')
+		proto=$(echo ${cust} | awk -F ':' '{print $5}')
+		port=$(echo ${cust} | awk -F ':' '{print $6}')
+		if [[ ${rule} == "allow" ]]; then rule="ACCEPT"; elif [[ ${rule} == "deny" ]]; then rule="DROP"; else rule="unset"; fi
+		if [[ ${direction} == "in" ]]; then direction="INPUT"; elif [[ ${direction} == "out" ]]; then direction="OUTPUT"; else direction="unset"; fi
+		if [[ ! -z ${country} ]]; then
+			if [[ ${direction} == "INPUT" ]]; then
+				countryrule="-m geoip --src-cc ${country}"
+			elif [[ ${direction} == "OUTPUT" ]]; then
+				countryrule="-m geoip -dst-cc ${country}"
+			fi
+		else
+			countryrule=""
+		fi
+		if [[ ! -z ${user} ]]; then
+			userrule="-m owner --uid-owner ${user}"
+		else
+			userrule=""
+		fi
+		if [[ ${proto} == "tcp" ]] || [[ ${proto} == "udp" ]]; then proto=${proto}; else proto="unset"; fi
+		if [[ ${port} >= "1" ]] && [[ ${port} <= "65535" ]]; then port=${port}; else port="unset"; fi
+		if [[ ${rule} != "unset" ]] && [[ ${direction} != "unset" ]] && [[ ${proto} != "unset" ]] && [[ ${port} != "unset" ]]; then 
+			if [[ ${direction} == "INPUT" ]]; then
+				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
+				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ${rule}
+			elif [[ ${direction} == "OUTPUT" ]]; then
+				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] ${usr}:${proto}:${port}:${country} OUT ${rule}"
+				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${countryrule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
+				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} -m conntrack --ctstate ESTABLISHED -j ${rule}
+			fi
+		fi
 	done
 fi
 
@@ -446,8 +457,6 @@ if [[ ${ispconfig} == "1" ]]; then
 	${IPT} -I OUTPUT -o ${PUB_IF} -m owner --uid-owner ispconfig -j ACCEPT
 	${IPT} -I OUTPUT -o ${PUB_IF} -m owner --uid-owner ispapps -j ACCEPT
 fi
-
-### add your other rules here ####
 
 #######################
 # drop and log everything else
