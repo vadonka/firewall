@@ -227,7 +227,7 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 			if [[ ${direction} == "INPUT" ]]; then
 				countryrule="-m geoip --src-cc ${country}"
 			elif [[ ${direction} == "OUTPUT" ]]; then
-				countryrule="-m geoip -dst-cc ${country}"
+				countryrule="-m geoip --dst-cc ${country}"
 			fi
 		else
 			countryrule=""
