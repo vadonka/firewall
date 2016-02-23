@@ -396,15 +396,15 @@ fi
 
 if [[ ! -z ${SSH_OUT} ]]; then
 	if [[ ${SSH_OUT} == "any" ]]; then
-		sshdst="-s 0/0"; sshout;
+		sshdst="-d 0/0"; sshout;
 	else
 		for s in ${SSH_OUT}
 		do
 			check=$(echo ${s} | grep [^[:alpha:]])
 			if [[ -z ${check} ]]; then
-				sshdst="-m geoip --src-cc ${s}"
+				sshdst="-m geoip --dst-cc ${s}"
 			else
-				sshdst="-s ${s}"
+				sshdst="-d ${s}"
 			fi
 			sshout;
 		done
@@ -412,22 +412,54 @@ if [[ ! -z ${SSH_OUT} ]]; then
 fi
 
 # allow incoming HTTP(S) port 80,443
+httpin()
+{
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${httpsrc} --sport 1024:65535 --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${httpsrc} --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+}
+httpsin()
+{
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${httpssrc} --sport 1024:65535 --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${httpssrc} --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+}
+
 if [[ ${webhttp} == "1" ]]; then
-	if [[ -z ${HTTP_IN} ]]; then
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	else
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp -m geoip --src-cc ${HTTP_IN} --sport 1024:65535 --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTP_IN} --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	if [[ ! -z ${HTTP_IN} ]]; then
+		if [[ ${HTTP_IN} == "any" ]]; then
+			httpsrc="-s 0/0"; httpin;
+		else
+			for h in ${HTTP_IN}
+			do
+				check=$(echo ${h} | grep [^[:alpha:]])
+				if [[ -z ${check} ]]; then
+					httpsrc="-m geoip --src-cc ${h}"
+				else
+					httpsrc="-s ${h}"
+				fi
+				httpin;
+			done
+		fi
 	fi
 fi
+
 if [[ ${webhttps} == "1" ]]; then
-	if [[ -z ${HTTPS_IN} ]]; then
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	else
-		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp -m geoip --src-cc ${HTTP_IN} --sport 1024:65535 --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTP_IN} --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	if [[ ! -z ${HTTPS_IN} ]]; then
+		if [[ ${HTTPS_IN} == "any" ]]; then
+			httpssrc="-s 0/0"; httpsin;
+		else
+			for h in ${HTTPS_IN}
+			do
+				check=$(echo ${h} | grep [^[:alpha:]])
+				if [[ -z ${check} ]]; then
+					httpssrc="-m geoip --src-cc ${h}"
+				else
+					httpssrc="-s ${h}"
+				fi
+				httpsin;
+			done
+		fi
 	fi
 fi
 
@@ -455,6 +487,14 @@ if [[ ${ispconfig} == "1" ]]; then
 			done
 		fi
 	fi
+fi
+
+if [[ ${ispconfig} == "1" ]] && [[ ! -z ${UNTRUST_ISPUSER} ]]; then
+	for usr in ${UNTRUST_ISPUSER}
+	do
+		${IPT} -I OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --match multiport --dports 80,443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] BLOCKED HTTP(S) OUT "
+		${IPT} -I OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --match multiport --dports 80,443 -m conntrack --ctstate NEW,ESTABLISHED -j DROP
+	done
 fi
 
 # allow incoming FTP
@@ -502,48 +542,51 @@ ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 53 --dport 1024:65535 -m conn
 ${IPT} -A OUTPUT -o ${PUB_IF} -p udp -m udp --dport 123 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 ${IPT} -A INPUT -i ${PUB_IF} -p udp -m udp --sport 123 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
-# allow outgoing HTTP,SMTP and LOG for all ispconfig user except untrusted
-http()
+# allow outgoing HTTP,SMTP and LOG
+httpout()
 {
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${httpoutdst} --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${httpoutdst} --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 }
-https()
+httpsout()
 {
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-}
-httpack()
-{
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTP_OUT} --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTP OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTP_OUT} --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-}
-httpsack()
-{
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTPS_OUT} --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m geoip --dst-cc ${HTTPS_OUT} --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${httpsoutdst} --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] HTTPS OUT "
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${httpsoutdst} --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 }
 
-if [[ ${ispconfig} == "1" ]] && [[ ! -z ${UNTRUST_ISPUSER} ]]; then
-	for usr in ${UNTRUST_ISPUSER}
-	do
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --match multiport --dports 80,443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] BLOCKED HTTP(S) OUT "
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --match multiport --dports 80,443 -m conntrack --ctstate NEW,ESTABLISHED -j DROP
-	done
+if [[ ! -z ${HTTP_OUT} ]]; then
+	if [[ ${HTTP_OUT} == "any" ]]; then
+		httpoutdst="-d 0/0"; httpout;
+	else
+		for h in ${HTTP_OUT}
+		do
+			check=$(echo ${h} | grep [^[:alpha:]])
+			if [[ -z ${check} ]]; then
+				httpoutdst="-m geoip --dst-cc ${h}"
+			else
+				httpoutdst="-d ${h}"
+			fi
+			httpout;
+		done
+	fi
 fi
 
-if [[ ! -z ${HTTP_OUT} ]] && [[ -z ${HTTPS_OUT} ]]; then
-	httpack; https;
-elif [[ -z ${HTTP_OUT} ]] && [[ ! -z ${HTTPS_OUT} ]]; then
-	http; httpsack;
-elif [[ ! -z ${HTTP_OUT} ]] && [[ ! -z ${HTTPS_OUT} ]]; then
-	httpack; httpsack;
-elif [[ -z ${HTTP_OUT} ]] && [[ -z ${HTTPS_OUT} ]]; then
-	http; https;
+if [[ ! -z ${HTTPS_OUT} ]]; then
+	if [[ ${HTTPS_OUT} == "any" ]]; then
+		httpsoutdst="-d 0/0"; httpsout;
+	else
+		for h in ${HTTPS_OUT}
+		do
+			check=$(echo ${h} | grep [^[:alpha:]])
+			if [[ -z ${check} ]]; then
+				httpsoutdst="-m geoip --dst-cc ${h}"
+			else
+				httpsoutdst="-d ${h}"
+			fi
+			httpsout;
+		done
+	fi
 fi
-
-# HTTP, HTTPS ACK
-${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --match multiport --sports 80,443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 
 # SMTP IN/OUT, POP3/IMAP IN OUT
 smtpin()
