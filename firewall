@@ -466,7 +466,7 @@ fi
 # allow incoming ISPCONFIG HTTP(S) port 8080,8081
 ispconfin()
 {
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp -m geoip --src-cc ${ispconfsrc} --sport 1024:65535 --match multiport --dports 8080,8081 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${ispconfsrc} --sport 1024:65535 --match multiport --dports 8080,8081 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --match multiport --sports 8080,8081 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 
