@@ -279,6 +279,7 @@ ${IPT} -A INPUT -i ${PUB_IF} -m conntrack --ctstate INVALID -j DROP
 
 # Custom input/output rules
 if [[ ! -z ${CUSTOM_RULES} ]]; then
+	error="0"
 	echo -n "Custom input/output user rules..."
 	for cust in ${CUSTOM_RULES}
 	do
@@ -288,8 +289,8 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 		user=$(echo ${cust} | awk -F ':' '{print $4}')
 		proto=$(echo ${cust} | awk -F ':' '{print $5}')
 		port=$(echo ${cust} | awk -F ':' '{print $6}')
-		if [[ ${rule} == "allow" ]]; then rule="ACCEPT"; elif [[ ${rule} == "deny" ]]; then rule="DROP"; else rule="unset"; fi
-		if [[ ${direction} == "in" ]]; then direction="INPUT"; elif [[ ${direction} == "out" ]]; then direction="OUTPUT"; else direction="unset"; fi
+		if [[ ${rule} == "allow" ]]; then rule="ACCEPT"; elif [[ ${rule} == "deny" ]]; then rule="DROP"; else error="1"; fi
+		if [[ ${direction} == "in" ]]; then direction="INPUT"; elif [[ ${direction} == "out" ]]; then direction="OUTPUT"; else error="1"; fi
 		if [[ ! -z ${cntorip} ]]; then
 			check=$(echo ${cntorip} | grep [^[:alpha:]])
 			if [[ -z ${check} ]]; then
@@ -313,17 +314,21 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 		else
 			userrule=""
 		fi
-		if [[ ${proto} == "tcp" ]] || [[ ${proto} == "udp" ]]; then proto=${proto}; else proto="unset"; fi
-		if [[ ${port} -ge "1" ]] && [[ ${port} -le "65535" ]]; then port=${port}; else port="unset"; fi
-		if [[ ${rule} != "unset" ]] && [[ ${direction} != "unset" ]] && [[ ${proto} != "unset" ]] && [[ ${port} != "unset" ]]; then 
+		if [[ ${proto} == "tcp" ]]; then proto="-p tcp -m tcp"; elif [[ ${proto} == "udp" ]]; then proto="-p udp -m udp"; else proto=""; fi
+		if [[ ! -z ${proto} ]]; then
+			if [[ ${port} -ge "1" ]] && [[ ${port} -le "65535" ]]; then port=${port}; else port="1:65535"; fi
+		else
+			if [[ ${port} -ge "1" ]] && [[ ${port} -le "65535" ]]; then error="1"; fi
+		fi
+		if [[ ${error} == "0" ]]; then 
 			if [[ ${direction} == "INPUT" ]]; then
-				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] CUSTIN ${proto}:${port}:${rule}"
-				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
-				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ${rule}
+				${IPT} -A INPUT -i ${PUB_IF} ${proto} ${cntoriprule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] CUSTIN ${proto}:${port}:${rule}"
+				${IPT} -A INPUT -i ${PUB_IF} ${proto} ${cntoriprule} ${userrule} --sport 1024:65535 --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
+				${IPT} -A OUTPUT -o ${PUB_IF} ${proto} --sport ${port} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ${rule}
 			elif [[ ${direction} == "OUTPUT" ]]; then
-				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] CUSTOUT ${proto}:${port}:${rule}"
-				${IPT} -A OUTPUT -o ${PUB_IF} -p ${proto} -m ${proto} ${cntoriprule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
-				${IPT} -A INPUT -i ${PUB_IF} -p ${proto} -m ${proto} --sport ${port} -m conntrack --ctstate ESTABLISHED -j ${rule}
+				${IPT} -A OUTPUT -o ${PUB_IF} ${proto} ${cntoriprule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] CUSTOUT ${proto}:${port}:${rule}"
+				${IPT} -A OUTPUT -o ${PUB_IF} ${proto} ${cntoriprule} ${userrule} --dport ${port} -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
+				${IPT} -A INPUT -i ${PUB_IF} ${proto} --sport ${port} -m conntrack --ctstate ESTABLISHED -j ${rule}
 			fi
 		fi
 	done
