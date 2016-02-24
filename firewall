@@ -514,6 +514,7 @@ ftpin()
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${ftpsrc} --sport 1024:65535 --dport ${FTP_PORT} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${ftpsrc} --sport 1024:65535 --dport ${FTP_PASV} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${FTP_PORT} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${FTP_PASV} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 
 if [[ ! -z ${FTP_PORT} ]]; then
