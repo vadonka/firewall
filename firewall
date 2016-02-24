@@ -332,6 +332,8 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 				${IPT} -A OUTPUT -o ${PUB_IF} ${proto} ${cntoriprule} ${userrule} $(if [[ ! -z ${port} ]]; then echo "--dport ${port}"; fi) -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
 				${IPT} -A INPUT -i ${PUB_IF} ${proto} $(if [[ ! -z ${port} ]]; then echo "--sport ${port}"; fi) -m conntrack --ctstate ESTABLISHED -j ${rule}
 			fi
+		else
+			echo -n "Misconfigured rules: ${cust}..."
 		fi
 	done
 fi
