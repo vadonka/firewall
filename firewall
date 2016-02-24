@@ -333,8 +333,8 @@ fi
 if [[ -z ${TRUSTED_NET} ]]; then TRUSTED_NET="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"; fi
 for ip in ${TRUSTED_NET}
 do
-	${IPT} -A INPUT -i ${PUB_IF} -s ${ip} -d ${LOCAL_IP} -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -d ${ip} -s ${LOCAL_IP} -j ACCEPT
+	${IPT} -A INPUT -i ${PUB_IF} -s ${ip} -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -d ${ip} -j ACCEPT
 done
 
 # allow incoming sync/ack packets
@@ -433,13 +433,13 @@ fi
 httpin()
 {
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${httpsrc} --sport 1024:65535 --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${httpsrc} --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 httpsin()
 {
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${httpssrc} --sport 1024:65535 --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${httpssrc} --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 
