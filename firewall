@@ -1,4 +1,9 @@
 #!/bin/bash
+# Hardened advanced firewall script
+# written by vadonka
+# No copyright, feel free to evolve :)
+# v2.0.0
+# 2016.02.24.
 
 if [[ $1 == "stop" ]]; then
 	stop="1"
@@ -13,23 +18,20 @@ echo -en "Config file doesn't exsist!\nCreating default config..."
 cat > /usr/local/etc/firewall.conf << EOF
 ### Change this to yes or comment out after setup
 configured=no
-
+#
 ### iptables binary
 IPT="/sbin/iptables"
-
+#
 ### Interfaces
 PUB_IF="eth0"   # public interface
 LO_IF="lo"      # loopback
-
+#
 ### Trusted networks, separated with space
 #TRUSTED_NET="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
-
+#
 ### Trusted users, separated with space
 #TRUSTED_USERS="root"
-
-### Default ALL ispconfig (if installed) WEB USER will be trusted except whos listed in untrusted, separated with space
-#UNTRUST_ISPUSER=""
-
+#
 ### Country/IP only accept, separated with space
 ##  GeoIP two letter country code or IP/MASK
 #   example: "HU 123.123.123.123/26 CN US"
@@ -37,6 +39,7 @@ LO_IF="lo"      # loopback
 #   if not defined means block all access!
 #
 #ICMP_IN=""					# ICMP inbound rules
+#DNS_IN=""					# DNS inbound rules
 #FTP_IN=""					# FTP inbound rules
 #FTP_PORT="21"				# FTP server port, default: 21
 #FTP_PASV="50000:60000"		# FTP passive port range
@@ -52,21 +55,24 @@ LO_IF="lo"      # loopback
 #HTTPS_IN=""				# HTTPS inbound rules for port 443
 #HTTP_OUT=""				# HTTP outbound rules for port 80
 #HTTPS_OUT=""				# HTTPS outbound rules for port 443
-
+#
 ### Custom input/output rules
 # syntax "rule:direction:country/ip:username:proto:port"
-# rule: allow or deny (cannot be empty!)
-# direction: in or out (cannot be empty!)
+# rule: "allow" or "deny" (cannot be empty!)
+# direction: "in" or "out" (cannot be empty!)
 # country/ip: GeoIP two letter country code like US,CN,HU or IP/MASK (or leave empty)
 # username: system username (or leave empty)
-# proto: tcp or udp (or leave empty)
+# proto: "tcp" or "udp" (or leave empty)
 # port: 1-65535 (or leave empty)
+# empty parameter need to preserve the separate colon!
 #
 # multiple rules write to a new row (one rule/row)
 # example, allow tcp 1234 input port from US "allow:in:US::tcp:1234"
 #
 # important note: user match can only be use in out direction,
 # it will be ignored in any input rules!
+# Custom rules added right after the base rules,
+# so it will be override any predefined rules above!
 #
 #CUSTOM_RULES="
 #allow:in:US::tcp:1234
@@ -335,6 +341,18 @@ done
 ${IPT} -A INPUT -p tcp -m tcp --sport 0:1023 ! --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT
 ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
+# allow trusted users unlimited outbound
+if [[ -z ${TRUSTED_USERS} ]]; then TRUSTED_USERS="root"; fi
+for usr in ${TRUSTED_USERS}
+do
+	${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -j ACCEPT
+done
+
+if [[ ${ispconfig} == "1" ]]; then
+	${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ispconfig -j ACCEPT
+	${IPT} -A OUTPUT -o ${PUB_IF} -m owner --uid-owner ispapps -j ACCEPT
+fi
+
 # allow incoming ICMP ping pong stuff
 icmpin()
 {
@@ -489,14 +507,6 @@ if [[ ${ispconfig} == "1" ]]; then
 	fi
 fi
 
-if [[ ${ispconfig} == "1" ]] && [[ ! -z ${UNTRUST_ISPUSER} ]]; then
-	for usr in ${UNTRUST_ISPUSER}
-	do
-		${IPT} -I OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --match multiport --dports 80,443 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] BLOCKED HTTP(S) OUT "
-		${IPT} -I OUTPUT -o ${PUB_IF} -p tcp -m tcp -m owner --uid-owner ${usr} --match multiport --dports 80,443 -m conntrack --ctstate NEW,ESTABLISHED -j DROP
-	done
-fi
-
 # allow incoming FTP
 ftpin()
 {
@@ -526,11 +536,31 @@ if [[ ! -z ${FTP_PORT} ]]; then
 fi
 
 # allow incoming DNS
-if [[ ${dns} == "1" ]]; then
-	${IPT} -A INPUT -i ${PUB_IF} -p udp -m udp --sport 1024:65535 --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+dnsin()
+{
+	${IPT} -A INPUT -i ${PUB_IF} -p udp -m udp ${dnsinsrc} --sport 1024:65535 --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 	${IPT} -A OUTPUT -o ${PUB_IF} -p udp -m udp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 1024:65535 --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${dnsinsrc} --sport 1024:65535 --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+}
+
+if [[ ${dns} == "1" ]]; then
+	if [[ ! -z ${DNS_IN} ]]; then
+		if [[ ${DNS_IN} == "any" ]]; then
+			dnsinsrc="-s 0/0"; dnsin;
+		else
+			for d in ${FTP_IN}
+			do
+				check=$(echo ${d} | grep [^[:alpha:]])
+				if [[ -z ${check} ]]; then
+					dnsinsrc="-m geoip --src-cc ${d}"
+				else
+					dnsinsrc="-s ${d}"
+				fi
+				dnsin;
+			done
+		fi
+	fi
 fi
 
 # allow outgoing DNS
@@ -721,19 +751,6 @@ if [[ ! -z ${POPI_OUT} ]]; then
 			popout;
 		done
 	fi
-fi
-
-# allow trusted users unlimited outbound
-if [[ -z ${TRUSTED_USERS} ]]; then TRUSTED_USERS="root"; fi
-for usr in ${TRUSTED_USERS}
-do
-	# ${IPT} -I OUTPUT -o ${PUB_IF} -j LOG --log-uid --log-prefix "[FW] ${usr} " ### disabled because too much logging spoof
-	${IPT} -I OUTPUT -o ${PUB_IF} -m owner --uid-owner ${usr} -j ACCEPT
-done
-
-if [[ ${ispconfig} == "1" ]]; then
-	${IPT} -I OUTPUT -o ${PUB_IF} -m owner --uid-owner ispconfig -j ACCEPT
-	${IPT} -I OUTPUT -o ${PUB_IF} -m owner --uid-owner ispapps -j ACCEPT
 fi
 
 #######################
