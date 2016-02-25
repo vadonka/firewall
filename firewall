@@ -770,7 +770,12 @@ ${IPT} -A INPUT -j DROP
 
 # Restart Fail2Ban if needed
 if [[ ${fbrestart} == "1" ]]; then
-    /etc/init.d/fail2ban restart > /dev/null 2>&1
+	if [[ -e /etc/init.d/fail2ban ]]; then
+		/etc/init.d/fail2ban restart > /dev/null 2>&1
+	else
+		checksystemd=$(find /etc/systemd -name *fail2ban*)
+		if [[ ! -z ${checksystemd} ]]; then systemctl restart fail2ban.service; fi
+	fi
 fi
 
 echo "Done."
