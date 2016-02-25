@@ -1,12 +1,13 @@
 [Unit]
-Description=Hardened advance iptables firewall script
-After=network.target
+Description=Hardened Firewall Service
+After=network.target iptables.service
 
 [Service]
+Type=oneshot
 ExecStart=/usr/local/bin/firewall/firewall start
 ExecStop=/usr/local/bin/firewall/firewall stop
 ExecReload=/usr/local/bin/firewall/firewall start
-Restart=on-abort
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
