@@ -1,6 +1,6 @@
 [Unit]
 Description=Hardened Firewall Service
-After=network.target iptables.service
+After=network.target
 
 [Service]
 Type=oneshot
