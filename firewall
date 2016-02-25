@@ -773,7 +773,7 @@ if [[ ${fbrestart} == "1" ]]; then
 	if [[ -e /etc/init.d/fail2ban ]]; then
 		/etc/init.d/fail2ban restart > /dev/null 2>&1
 	else
-		checksystemd=$(find /etc/systemd -name *fail2ban*)
+		checksystemd=$(find /etc/systemd/ -name "*fail2ban*")
 		if [[ ! -z ${checksystemd} ]]; then systemctl restart fail2ban.service; fi
 	fi
 fi
