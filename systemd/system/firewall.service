@@ -1,0 +1,12 @@
+[Unit]
+Description=Hardened advance iptables firewall script
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/firewall/firewall start
+ExecStop=/usr/local/bin/firewall/firewall stop
+ExecReload=/usr/local/bin/firewall/firewall start
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target
