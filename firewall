@@ -2,8 +2,8 @@
 # Hardened advanced firewall script
 # written by vadonka
 # No copyright, feel free to evolve :)
-# v2.0.0
-# 2016.02.24.
+# v2.0.1
+# 2016.02.25.
 
 if [[ $1 == "stop" ]]; then
 	stop="1"
