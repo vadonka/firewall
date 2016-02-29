@@ -392,20 +392,19 @@ sshin()
 	if [[ ! -z ${SSH_PORT} ]]; then
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${sshsrc} --sport 1024:65535 --dport ${SSH_PORT} -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] SSH IN "
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${sshsrc} --sport 1024:65535 --dport ${SSH_PORT} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${SSH_PORT} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 }
 sshout()
 {
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${sshdst} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SSH OUT "
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp ${sshdst} --dport 22 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 22 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 
 if [[ ! -z ${SSH_PORT} ]]; then
 	if [[ ! -z ${SSH_IN} ]]; then
 		if [[ ${SSH_IN} == "any" ]]; then
 			sshsrc="-s 0/0"; sshin;
+            ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${SSH_PORT} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		else
 			for s in ${SSH_IN}
 			do
@@ -417,6 +416,7 @@ if [[ ! -z ${SSH_PORT} ]]; then
 				fi
 				sshin;
 			done
+            ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${SSH_PORT} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		fi
 	fi
 fi
@@ -424,6 +424,7 @@ fi
 if [[ ! -z ${SSH_OUT} ]]; then
 	if [[ ${SSH_OUT} == "any" ]]; then
 		sshdst="-d 0/0"; sshout;
+        ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 22 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	else
 		for s in ${SSH_OUT}
 		do
@@ -435,6 +436,7 @@ if [[ ! -z ${SSH_OUT} ]]; then
 			fi
 			sshout;
 		done
+        ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 22 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 fi
 
@@ -443,19 +445,18 @@ httpin()
 {
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${httpsrc} --sport 1024:65535 --dport 80 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 httpsin()
 {
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${httpssrc} --sport 1024:65535 --dport 443 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 
 if [[ ${webhttp} == "1" ]]; then
 	if [[ ! -z ${HTTP_IN} ]]; then
 		if [[ ${HTTP_IN} == "any" ]]; then
 			httpsrc="-s 0/0"; httpin;
+            ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		else
 			for h in ${HTTP_IN}
 			do
@@ -467,6 +468,7 @@ if [[ ${webhttp} == "1" ]]; then
 				fi
 				httpin;
 			done
+            ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 80 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		fi
 	fi
 fi
@@ -475,6 +477,7 @@ if [[ ${webhttps} == "1" ]]; then
 	if [[ ! -z ${HTTPS_IN} ]]; then
 		if [[ ${HTTPS_IN} == "any" ]]; then
 			httpssrc="-s 0/0"; httpsin;
+            ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		else
 			for h in ${HTTPS_IN}
 			do
@@ -486,6 +489,7 @@ if [[ ${webhttps} == "1" ]]; then
 				fi
 				httpsin;
 			done
+            ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --sport 443 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		fi
 	fi
 fi
@@ -494,13 +498,13 @@ fi
 ispconfin()
 {
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${ispconfsrc} --sport 1024:65535 --match multiport --dports 8080,8081 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --match multiport --sports 8080,8081 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 
 if [[ ${ispconfig} == "1" ]]; then
 	if [[ ! -z ${ISPCONF_IN} ]]; then
 		if [[ ${ISPCONF_IN} == "any" ]]; then
 			ispconfsrc="-s 0/0"; ispconfin;
+            ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --match multiport --sports 8080,8081 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		else
 			for i in ${ISPCONF_IN}
 			do
@@ -512,6 +516,7 @@ if [[ ${ispconfig} == "1" ]]; then
 				fi
 				ispconfin;
 			done
+            ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --match multiport --sports 8080,8081 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		fi
 	fi
 fi
@@ -522,14 +527,14 @@ ftpin()
 	if [[ -z ${FTP_PASV} ]]; then FTP_PASV="1024:65535"; fi
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${ftpsrc} --sport 1024:65535 --dport ${FTP_PORT} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${ftpsrc} --sport 1024:65535 --dport ${FTP_PASV} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${FTP_PORT} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${FTP_PASV} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 
 if [[ ! -z ${FTP_PORT} ]]; then
 	if [[ ! -z ${FTP_IN} ]]; then
 		if [[ ${FTP_IN} == "any" ]]; then
 			ftpsrc="-s 0/0"; ftpin;
+            ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${FTP_PORT} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+            ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${FTP_PASV} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		else
 			for f in ${FTP_IN}
 			do
@@ -541,6 +546,8 @@ if [[ ! -z ${FTP_PORT} ]]; then
 				fi
 				ftpin;
 			done
+            ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${FTP_PORT} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+            ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport ${FTP_PASV} --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		fi
 	fi
 fi
@@ -549,15 +556,15 @@ fi
 dnsin()
 {
 	${IPT} -A INPUT -i ${PUB_IF} -p udp -m udp ${dnsinsrc} --sport 1024:65535 --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p udp -m udp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${dnsinsrc} --sport 1024:65535 --dport 53 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 
 if [[ ${dns} == "1" ]]; then
 	if [[ ! -z ${DNS_IN} ]]; then
 		if [[ ${DNS_IN} == "any" ]]; then
 			dnsinsrc="-s 0/0"; dnsin;
+            ${IPT} -A OUTPUT -o ${PUB_IF} -p udp -m udp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	        ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		else
 			for d in ${FTP_IN}
 			do
@@ -569,6 +576,8 @@ if [[ ${dns} == "1" ]]; then
 				fi
 				dnsin;
 			done
+            ${IPT} -A OUTPUT -o ${PUB_IF} -p udp -m udp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	        ${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 53 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 		fi
 	fi
 fi
@@ -635,16 +644,26 @@ smtpin()
 	if [[ ${smtp25} == "1" ]]; then
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] SMTP IN 25 "
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 25 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 25 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 	if [[ ${smtp465} == "1" ]]; then
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 465 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] SMTP IN 465 "
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 465 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 465 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 	if [[ ${smtp587} == "1" ]]; then
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 587 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] SMTP IN 587 "
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${smtpsrc} --sport 1024:65535 --dport 587 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	fi
+}
+
+smtpinack()
+{
+    if [[ ${smtp25} == "1" ]]; then
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 25 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+	if [[ ${smtp465} == "1" ]]; then
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 465 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+	if [[ ${smtp587} == "1" ]]; then
 		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 587 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 }
@@ -653,7 +672,6 @@ smtpout()
 {
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 ${smtpdst} --match multiport --dports 25,465,587 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] SMTP OUT "
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 ${smtpdst} --match multiport --dports 25,465,587 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --match multiport --sports 25,465,587 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 
 popin()
@@ -661,21 +679,33 @@ popin()
 	if [[ ${pop110} == "1" ]]; then
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 110 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] POP3 IN 110 "
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 110 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 110 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 	if [[ ${pop995} == "1" ]]; then
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 995 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] POP3 IN 995 "
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 995 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 995 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 	if [[ ${imap143} == "1" ]]; then
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 143 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] IMAP IN 143 "
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 143 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 143 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 	if [[ ${imap993} == "1" ]]; then
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 993 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] POP3 IN 993 "
 		${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp ${popisrc} --sport 1024:65535 --dport 993 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
+	fi
+}
+
+popinack()
+{
+    if [[ ${pop110} == "1" ]]; then
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 110 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+	if [[ ${pop995} == "1" ]]; then
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 995 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+	if [[ ${imap143} == "1" ]]; then
+		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 143 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
+	fi
+	if [[ ${imap993} == "1" ]]; then
 		${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 993 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 }
@@ -684,14 +714,13 @@ popout()
 {
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 ${popidst} --match multiport --dports 110,143,993,995 -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] POP/IMAP OUT "
 	${IPT} -A OUTPUT -o ${PUB_IF} -p tcp -m tcp --sport 1024:65535 ${popidst} --match multiport --dports 110,143,993,995 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT
-	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --match multiport --sports 110,143,993,995 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 }
 
 # SMTP IN
 if [[ ! -z ${SMTP_IN} ]]; then
 	if [[ ${SMTP_IN} == "any" ]]; then
 		smtpsrc="-s 0/0"
-		smtpin;
+		smtpin; smtpinack;
 	else
 		for s in ${SMTP_IN}
 		do
@@ -703,6 +732,7 @@ if [[ ! -z ${SMTP_IN} ]]; then
 			fi
 			smtpin;
 		done
+        smtpinack;
 	fi
 fi
 
@@ -711,6 +741,7 @@ if [[ ! -z ${SMTP_OUT} ]]; then
 	if [[ ${SMTP_OUT} == "any" ]]; then
 		smtpdst="-d 0/0"
 		smtpout;
+        ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --match multiport --sports 25,465,587 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	else
 		for s in ${SMTP_OUT}
 		do
@@ -722,6 +753,7 @@ if [[ ! -z ${SMTP_OUT} ]]; then
 			fi
 			smtpout;
 		done
+        ${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --match multiport --sports 25,465,587 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 fi
 
@@ -729,7 +761,7 @@ fi
 if [[ ! -z ${POPI_IN} ]]; then
 	if [[ ${POPI_IN} == "any" ]]; then
 		popisrc="-s 0/0"
-		popin;
+		popin; popinack;
 	else
 		for s in ${POPI_IN}
 		do
@@ -741,6 +773,7 @@ if [[ ! -z ${POPI_IN} ]]; then
 			fi
 			popin;
 		done
+        popinack;
 	fi
 fi
 
@@ -749,6 +782,7 @@ if [[ ! -z ${POPI_OUT} ]]; then
 	if [[ ${POPI_OUT} == "any" ]]; then
 		popidst="-d 0/0"
 		popout;
+       	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --match multiport --sports 110,143,993,995 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	else
 		for s in ${POPI_OUT}
 		do
@@ -760,6 +794,7 @@ if [[ ! -z ${POPI_OUT} ]]; then
 			fi
 			popout;
 		done
+       	${IPT} -A INPUT -i ${PUB_IF} -p tcp -m tcp --match multiport --sports 110,143,993,995 --dport 1024:65535 -m conntrack --ctstate ESTABLISHED -j ACCEPT
 	fi
 fi
 
