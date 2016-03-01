@@ -326,11 +326,15 @@ if [[ ! -z ${CUSTOM_RULES} ]]; then
 			if [[ ${direction} == "INPUT" ]]; then
 				${IPT} -A INPUT -i ${PUB_IF} ${proto} ${cntoriprule} ${userrule} $(if [[ ! -z ${port} ]]; then echo "--sport 1024:65535 --dport ${port}"; fi) -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-prefix "[FW] CUSTIN ${pr}:${port}:${rule}"
 				${IPT} -A INPUT -i ${PUB_IF} ${proto} ${cntoriprule} ${userrule} $(if [[ ! -z ${port} ]]; then echo "--sport 1024:65535 --dport ${port}"; fi) -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
-				${IPT} -A OUTPUT -o ${PUB_IF} ${proto} $(if [[ ! -z ${port} ]]; then echo "--sport ${port} --dport 1024:65535"; fi) -m conntrack --ctstate ESTABLISHED -j ACCEPT
+				if [[ ${rule} == "ACCEPT" ]]; then
+					${IPT} -A OUTPUT -o ${PUB_IF} ${proto} $(if [[ ! -z ${port} ]]; then echo "--sport ${port} --dport 1024:65535"; fi) -m conntrack --ctstate ESTABLISHED -j ACCEPT
+				fi
 			elif [[ ${direction} == "OUTPUT" ]]; then
 				${IPT} -A OUTPUT -o ${PUB_IF} ${proto} ${cntoriprule} ${userrule} $(if [[ ! -z ${port} ]]; then echo "--dport ${port}"; fi) -m conntrack --ctstate NEW,ESTABLISHED -m limit --limit 5/m --limit-burst 7 -j LOG --log-uid --log-prefix "[FW] CUSTOUT ${pr}:${port}:${rule}"
 				${IPT} -A OUTPUT -o ${PUB_IF} ${proto} ${cntoriprule} ${userrule} $(if [[ ! -z ${port} ]]; then echo "--dport ${port}"; fi) -m conntrack --ctstate NEW,ESTABLISHED -j ${rule}
-				${IPT} -A INPUT -i ${PUB_IF} ${proto} $(if [[ ! -z ${port} ]]; then echo "--sport ${port}"; fi) -m conntrack --ctstate ESTABLISHED -j ACCEPT
+				if [[ ${rule} == "ACCEPT" ]]; then
+					${IPT} -A INPUT -i ${PUB_IF} ${proto} $(if [[ ! -z ${port} ]]; then echo "--sport ${port}"; fi) -m conntrack --ctstate ESTABLISHED -j ACCEPT
+				fi
 			fi
 		else
 			echo -n "Misconfigured rules: ${cust}..."
