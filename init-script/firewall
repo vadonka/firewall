@@ -12,17 +12,15 @@
 . /lib/lsb/init-functions
 
 case "$1" in
-  start|restart|force-reload)
-        /usr/local/bin/firewall/firewall
-        exit $?
-        ;;
-  stop)
-        /usr/local/bin/firewall/firewall stop
-        exit $?
-        ;;
-  *)
-        echo "Usage: /etc/init.d/firewall" \
-                        "{start|stop}"
-        exit 2
-        ;;
+	start|restart|force-reload)
+		/usr/local/bin/firewall/firewall
+		;;
+	stop)
+		/usr/local/bin/firewall/firewall stop
+		;;
+	*)
+		echo "Usage: /etc/init.d/firewall" \
+				"{start|stop}"
+		exit 2
+		;;
 esac
